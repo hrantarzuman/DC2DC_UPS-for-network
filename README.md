@@ -55,7 +55,8 @@
 | 2 | LiFePO4 CC/CV şarj modülü | Giriş 15-24V, çıkış 14.6V'a ayarlanabilir, 3-5A | 1 | "XL4015 step down modül ayarlanabilir 5A" veya "LiFePO4 şarj modülü 14.6V" |
 | 3 | AC-DC adaptör (şarj için) | 24V DC, ≥5A | 1 | "24V 5A adaptör" |
 | 4 | Schottky diyot (ORing için) | TO-220 paket, ≥5A, ≥40V (ör. SB560 veya 1N5822) | 2 | "SB560 schottky diyot TO-220" veya "1N5822 diyot" |
-| 5 | 12V→5V/3A step-down (USB-C çıkışlı) | Giriş 9-15V, çıkış 5V/3A sabit | 1 | "DC-DC step down USB-C çıkışlı 5V 3A modül" |
+| 5 | 12V→5V step-down (Pi CM5 için) | **Kaplantis QCmini** — giriş 6-32V, çıkış varsayılan 5V (24W = ~4.8A'ya kadar, negotiation yapılmadığı için Pi hep sabit 5V görür), USB-A dişi çıkış. 85.40 TL | 1 | Sipariş verildi (kaplantis.com, "USB DC step-down modül QCmini") |
+| 5b | USB-A (erkek) → USB-C (erkek) kablo | Modülün USB-A çıkışını Pi'nin USB-C girişine bağlamak için | 1 | **Zaten mevcut** (Baseus marka, kısa kablo) — satın almaya gerek yok |
 | 6 | ~~Arduino Nano~~ ESP32-C3 Mini | **Zaten mevcut, satın almaya gerek yok** (Hrant'ta hazır) | 0 | — |
 | 6b | Küçük 5V step-down/USB modülü (ESP32-C3'ü beslemek için) | Giriş 9-15V, çıkış 5V (Pi'nin modülünden ayrı, bağımsız hat) | 1 | "mini DC-DC step down 5V USB modül" |
 | 7 | Gerilim bölücü dirençler (ESP32-C3 için, 3.3V ADC tavanına göre) | AC-sense: 100kΩ+10kΩ, Bat-sense: 47kΩ+10kΩ | 1 set | "direnç seti 1/4W çeşitli değer" |
