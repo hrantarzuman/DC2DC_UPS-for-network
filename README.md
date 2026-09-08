@@ -13,21 +13,30 @@
 
 - ✅ Faz 0 — Tüketim tahmini: Pi ~3-4W (ölçülmüş), modem 12V/2.5A (30W) adaptör tavanı worst-case kabul edildi.
 - ✅ Faz 1 — BOM hazırlandı (aşağıda).
-- ✅ Faz 2 (firmware kısmı) — `firmware/ups_monitor_esp32c3/ups_monitor_esp32c3.ino` yazıldı
-  (ESP32-C3 Mini, Hrant'ta zaten mevcut donanım). Donanım montajı parçalar gelince yapılacak.
+- ✅ Faz 2 (firmware kısmı) — `firmware/ups_monitor_esp32c3/ups_monitor_esp32c3.ino` yazıldı ve
+  ESP32-C3'e yüklendi, Wi-Fi'ye bağlandı, test Telegram bildirimi başarıyla geldi (uçtan uca doğrulandı).
 - ✅ Faz 5 (Telegram kısmı) önden alındı — firmware, ESP32'nin Wi-Fi'si üzerinden **Pi'den bağımsız**
   olarak doğrudan Telegram'a bildirim gönderiyor (Pi çökse/ağdan düşse bile bildirim gider).
-- ⏳ Faz 3-4, 6 — Yük testi, kalıcı montaj, NETWORK_INVENTORY.md güncellemesi bekliyor.
+- ✅ Akü satın alındı: **Power-Xtra PX26-12, 12V 26Ah VRLA kurşun asit** (LiFePO4 yerine — 8 Eylül 2026
+  kararı, maliyet çok daha uygun). İlk şarjı yapıldı.
+- ✅ **Bağlantı şeması hazır** → [DC-UPS Bağlantı Şeması](https://claude.ai/code/artifact/9c88a91e-7731-4aa1-8342-e20f013d8b7d)
+- ⏳ Faz 3-4, 6 — Perfboard montajı, yük testi, kalıcı montaj, NETWORK_INVENTORY.md güncellemesi bekliyor.
 
 ## Mimari Özeti
 
-1. **Şarj katı:** Ayarlanabilir CC/CV buck şarj modülü, LiFePO4 için 14.6V absorption'a set edilecek.
+> Tam görsel şema için bkz. [DC-UPS Bağlantı Şeması](https://claude.ai/code/artifact/9c88a91e-7731-4aa1-8342-e20f013d8b7d).
+
+1. **Şarj katı:** XL4015 CC/CV buck şarj modülü, **13.6-13.8V float** çıkışına set edilir (akünün
+   etiketindeki "Standby use" değeri — bkz. BOM #1 notu, ilk yoğun şarj için geçici olarak 14.4V kullanıldı).
 2. **Mains-kaybı algılama:** ESP32-C3'ün ADC'si, AC-DC adaptörün DC çıkışını izler (24V → ~10V altı = kesinti).
-3. **Kesintisiz geçiş:** 2x Schottky diyot ORing (mains yolu + batarya yolu → ortak 12V bara, hangi
-   kaynak voltajı yüksekse o besler). Röle yok, gecikme/sekme riski yok — **firmware güç yolunu kontrol
-   etmez, sadece izler.** (İlk tasarımda LM74610 ideal-diyot modülü planlanmıştı; ~44 USD/adet maliyeti
-   nedeniyle 8 Eylül 2026'da basit Schottky diyota geçildi — bkz. BOM #4 notu.)
-4. **Çıkışlar:** 12V bara → modem (barrel jack), 12V→5V/3A step-down (USB-C) → Pi CM5.
+3. **Kesintisiz geçiş — TEK diyot (D1):** Şarj modülü çıkışı ile ortak bara arasına **tek bir 1N5822
+   Schottky diyot** (D1) konur — sadece bataryanın (mains kesintisinde) ölü şarj modülüne geri akım
+   vermesini engellemek için. **Akü ile ortak bara arasında diyot YOK** — ikisi zaten aynı elektriksel
+   düğüm (klasik float-şarj UPS topolojisi); bu yüzden kesinti anında hiçbir gecikme/anahtarlama olmadan
+   akü devrede kalır. (İlk tasarımda LM74610 ideal-diyot modülleri, sonra 2x Schottky planlanmıştı;
+   şemayı çizerken ikinci diyotun gereksiz olduğu — akü ve bara zaten aynı düğüm olduğu için — fark
+   edildi ve tek diyota sadeleştirildi.)
+4. **Çıkışlar:** Ortak bara → modem (barrel jack), 2x QCmini (12V→5V) → biri Pi CM5'e, biri ESP32-C3'e.
 5. **Kontrolcü:** **ESP32-C3 Mini** (Hrant'ta zaten mevcut, Arduino Uno yerine tercih edildi — 8 Eylül
    2026 kararı). Batarya/mains durumunu izler, durum LED'i sürer, ve **Wi-Fi üzerinden doğrudan
    Telegram'a** bildirim gönderir — Pi'nin ayakta olmasına bağımlı değil (modem zaten bu UPS'ten
@@ -35,26 +44,30 @@
    3.3V mantık seviyesi ve strapping pin kısıtları nedeniyle pin seçimi ve direnç bölücüler Arduino
    Nano/Uno'dan farklıdır.
 
+**Kritik not — BMS yok:** LiFePO4'ün aksine seçilen kurşun asit akünün dahili koruma devresi (BMS) yok.
+Firmware güç yolunu kesmediği için (bilinçli tasarım), çok uzun bir kesintide akü ~11.5V altına inip
+zarar görebilir — Telegram'daki "DUSUK BATARYA" uyarısı geldiğinde manuel müdahale gerekebilir.
+
 ## Güç Bütçesi
 
 | Değer | Miktar |
 |---|---|
 | Pi CM5 tüketimi (ölçülmüş) | ~3-4W |
 | Modem adaptör tavanı (worst-case) | 30W (12V × 2.5A) |
-| Toplam worst-case yük | ~34W |
+| Toplam worst-case yük | ~34W (~2.83A @ 12V) |
 | Hedef süre | ≥4 saat |
-| Gerekli kullanılabilir kapasite | ~170Wh minimum |
-| Seçilen batarya | 12.8V (4S) LiFePO4, 20Ah (~256Wh nominal) — güvenlik marjı için |
-| Beklenen gerçek runtime | muhtemelen 6-8+ saat (gerçek yük tavan değerin altında olacaktır) |
+| Seçilen batarya | **Power-Xtra PX26-12, 12V 26Ah VRLA kurşun asit** (LiFePO4 yerine, maliyet nedeniyle — 8 Eylül 2026) |
+| DoD hesabı | ~2.83A çekişte Peukert etkisiyle efektif ~22-23Ah; 4 saatlik hedef bu akımda ~11.3Ah çeker → **~%50 DoD** — kurşun asit için sağlıklı/önerilen aralık |
+| Beklenen gerçek runtime | gerçek yük muhtemelen 34W tavanın altında olacağından muhtemelen 6-8+ saat |
 
 ## BOM (Sipariş Listesi)
 
 | # | Parça | Spesifikasyon | Adet | TR arama terimi (Robotistan/Direnç.net/Trendyol vb.) |
 |---|---|---|---|---|
-| 1 | LiFePO4 batarya paketi | 12.8V (4S), 20Ah, dahili BMS'li | 1 | "12.8V 20Ah LiFePO4 batarya BMS'li" |
-| 2 | LiFePO4 CC/CV şarj modülü | Giriş 15-24V, çıkış 14.6V'a ayarlanabilir, 3-5A | 1 | "XL4015 step down modül ayarlanabilir 5A" veya "LiFePO4 şarj modülü 14.6V" |
-| 3 | AC-DC adaptör (şarj için) | 24V DC, ≥5A | 1 | "24V 5A adaptör" |
-| 4 | Schottky diyot (ORing için) | TO-220 paket, ≥5A, ≥40V (ör. SB560 veya 1N5822) | 2 | "SB560 schottky diyot TO-220" veya "1N5822 diyot" |
+| 1 | ~~LiFePO4 batarya paketi~~ Kurşun asit akü | **Power-Xtra PX26-12, 12V 26Ah VRLA** — dahili BMS YOK, satın alındı | 1 | ✅ Alındı |
+| 2 | Şarj modülü | XL4015, giriş 24V, çıkış **13.6-13.8V float** (ilk yoğun şarjda geçici 14.4V), CC ~4-5A — satın alındı | 1 | ✅ Alındı |
+| 3 | AC-DC adaptör (şarj için) | 24V DC, ≥5A — **Hrant'ta zaten mevcut** | 0 | ✅ Mevcut |
+| 4 | Schottky diyot (D1, ORing için) | 1N5822 (3A/40V) — **tek adet yeterli**, satın alındı (5 adet alındı, 4'ü yedek) | 1 | ✅ Alındı |
 | 5 | 12V→5V step-down (Pi CM5 + ESP32-C3 için, **2 adet, ayrı hatlar**) | **Kaplantis QCmini** — giriş 6-32V, çıkış varsayılan 5V (24W = ~4.8A'ya kadar, negotiation yapılmadığı için hep sabit 5V üretir), USB-A dişi çıkış. 85.40 TL/adet. 1'i Pi'yi, 1'i ESP32-C3'ü besler — aynı modülden iki bağımsız hat, WiFi TX darbeleri Pi'yi etkilemesin diye | 2 | Sipariş verildi (kaplantis.com, "USB DC step-down modül QCmini") |
 | 5b | USB-A (erkek) → USB-C (erkek) kablo (Pi hattı için) | Modülün USB-A çıkışını Pi'nin USB-C girişine bağlamak için | 1 | **Zaten mevcut** (Baseus marka, kısa kablo) — satın almaya gerek yok |
 | 6 | ~~Arduino Nano~~ ESP32-C3 Mini | **Zaten mevcut, satın almaya gerek yok** (Hrant'ta hazır) | 0 | — |
@@ -68,14 +81,18 @@
 | 13 | DC barrel jack (dişi, panel/kablo tipi) | **5.5mm dış / 2.1mm iç çap, orta uç (+)** — Keenetic Hero KN-1012 resmi adaptör spesifikasyonuyla doğrulandı (12V, 2.5A, 9-12V doğrultulmuş stabilize çıkış) | 2-3 | "DC jack 5.5x2.1mm dişi" |
 | 14 | Kablo | 18AWG, esnek çok telli | birkaç metre | "18AWG silikon kablo" |
 
-**Karar (#4, 8 Eylül 2026):** LM74610 ideal-diyot modülü ~44 USD/adet çıktığından vazgeçildi, basit
-Schottky diyot ORing'e geçildi. Fark: ideal diyota göre ~0.3-0.5V gerilim düşümü ve diyot başına
-~1-1.5W ısı kaybı olur (bu akım seviyesinde küçük bir klips-tipi soğutucu yeterli) — pratikte runtime'ı
-ölçülemeyecek kadar az etkiler, TR'de her yerde bulunur, lehimlemesi kolay (TO-220, büyük bacaklı).
-**Önemli tasarım notu:** Schottky ORing'in doğru çalışması için şarj modülünün DC bara çıkış voltajı
-(mains varken), bataryanın olası tüm SOC aralığındaki dinlenme voltajından **her zaman yüksek**
-olmalı — aksi halde mains varken bile batarya boşalmaya devam edebilir. Şarj modülünü ~14.0-14.2V
-sabit çıkışa ayarlayın (LiFePO4 4S için hem güvenli hem batarya aralığının üstünde).
+**Karar (#4, 8 Eylül 2026 — iki aşamalı):** Önce LM74610 ideal-diyot modülü (~44 USD/adet) maliyet
+nedeniyle Schottky diyota geçildi. Sonra bağlantı şeması çizilirken **ikinci diyotun gereksiz olduğu**
+anlaşıldı: akü ile ortak bara zaten aynı elektriksel düğüm (klasik float-şarj topolojisi), aralarında
+diyota gerek yok — sadece şarj modülü ile bara arasına **tek bir D1 (1N5822)** yeterli, akünün ölü şarj
+modülüne geri akım vermesini engellemek için. Sonuç: 1 diyot, ~0.3-0.5V düşüm, ~0.5-1W ısı kaybı,
+pratikte runtime'a etkisi yok.
+
+**Şarj voltajı (kurşun asit için, LiFePO4'ten farklı):** XL4015 çıkışını akünün etiketindeki
+**"Standby use: 13.5-13.8V"** değerine (float, sürekli bağlı kullanım için) ayarlayın — bu hem D1'in
+doğru çalışması için batarya aralığının üzerinde kalır hem de kurşun asidi aşırı şarjdan korur. İlk
+yoğun şarj sırasında (akü belirgin boşken) "Cycle use: 14.4V" kullanıldı, doldu sayılınca (akım
+~0.5A altına düşünce) float değerine geçilecek.
 
 ~~**Bekleyen doğrulama:** #13~~ ✅ çözüldü (8 Eylül 2026) — Keenetic resmi belgesinden doğrulandı: 5.5x2.1mm, merkez pozitif.
 > Not: Resmi belge "9/12V" ve "3.0A'yı aşmayan" ifadesini kullanıyor — adaptör etiketi 12V/2.5A, tasarım
@@ -104,14 +121,18 @@ ve ucuz bir modülle bu risk sıfırlanıyor.
   olduğundan bu adım burada daha da önemli.
 - Pin seçimi bilinçli yapıldı: GPIO2/8/9 gibi boot-strapping pinlerinden kaçınıldı, ADC hatları
   GPIO0/GPIO1 (ADC1, Wi-Fi ile çakışmaz) üzerinden alındı — dosya başındaki yorumda gerekçesi var.
-- LiFePO4 SOC tahmini kaba bir tablo ile yapılır (LiFePO4 voltaj eğrisi düz olduğundan hassas değildir, sadece düşük-batarya uyarısı için yeterli).
+- SOC tablosu **kurşun asit** akü voltaj eğrisine göre kalibre edildi (12.7V=%100 … 11.5V=%0). Bu düğüm
+  mains varken şarj modülü tarafından 13.6-13.8V'a sabitlendiğinden, SOC okuması yalnızca `ON_BATTERY`
+  durumundayken (mains koptuğunda) anlamlıdır. Akünün BMS'i olmadığından `SOC_LOW_THRESHOLD` %25'e
+  (LiFePO4'e göre daha erken) ayarlandı.
 
 ## Sonraki Adımlar
 
-1. BOM'daki parçaları sipariş et (Schottky diyot, LiFePO4 paket, şarj modülü, vs. — ESP32-C3 ve Uno hariç, onlar zaten mevcut).
-2. `secrets.h` dosyasını oluşturup Wi-Fi/Telegram bilgilerini gir, firmware'i ESP32-C3'e yükle, seri monitörden Wi-Fi bağlantısını doğrula.
-3. Parçalar gelince perfboard üzerinde masaüstü prototip kur.
-4. `AC_DIVIDER_RATIO`/`BAT_DIVIDER_RATIO` kalibrasyonunu multimetre ile yap.
-5. Modem+Pi'yi prototipe bağlayıp fiş çekme testiyle switchover'ı doğrula, gerçek runtime'ı ölç, Telegram bildiriminin geldiğini teyit et.
-6. Kalıcı montaj.
-7. `network-docs` reposundaki `NETWORK_INVENTORY.md` ve `CLAUDE.md`'yi güncelle, bu repoya link ver.
+1. ~~BOM'daki parçaları sipariş et~~ ✅ akü, şarj modülü, diyotlar, dirençler, perfboard, barrel jack alındı.
+2. ~~Firmware'i yükle, Wi-Fi/Telegram doğrula~~ ✅ tamamlandı (8 Eylül 2026) — test bildirimi geldi.
+3. ~~Akünün ilk şarjı~~ ✅ yapılıyor (14.4V/4-5A ile, akım ~0.5A altına düşünce float'a (13.6-13.8V) geçilecek).
+4. **[DC-UPS Bağlantı Şeması](https://claude.ai/code/artifact/9c88a91e-7731-4aa1-8342-e20f013d8b7d)'na göre perfboard üzerinde devreyi kur** — sırayı şemadaki "Bağlantı sırası" bölümü belirliyor.
+5. Gerilim bölücüleri bağlayıp `AC_DIVIDER_RATIO`/`BAT_DIVIDER_RATIO` kalibrasyonunu multimetre ile yap.
+6. Modem+Pi'yi devreye bağlayıp fiş çekme testiyle switchover'ı doğrula, gerçek runtime'ı ölç.
+7. Kalıcı montaj (proje kutusu, sigortalama, etiketleme).
+8. `network-docs` reposundaki `NETWORK_INVENTORY.md` ve `CLAUDE.md`'yi güncelle, bu repoya link ver.

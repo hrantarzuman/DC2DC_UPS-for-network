@@ -21,7 +21,7 @@
 //
 // Bağlantılar:
 //   GPIO0 (ADC1_CH0) -> AC-DC şarj adaptörünün DC çıkışı (~24V), 100kohm(üst)+10kohm(alt) bölücüden sonra
-//   GPIO1 (ADC1_CH1) -> LiFePO4 batarya artı ucu, 47kohm(üst)+10kohm(alt) bölücüden sonra
+//   GPIO1 (ADC1_CH1) -> kurşun asit akü artı ucu (=ortak bara), 47kohm(üst)+10kohm(alt) bölücüden sonra
 //   GPIO7            -> Durum LED'i (+ 220-330ohm direnç, GND'ye) — harici LED kullanıyorsanız.
 //                        Kartınızda GPIO8'e bağlı onboard LED varsa onu da kullanabilirsiniz
 //                        (LED_PIN'i 8 yapın), ama GPIO8 bir strapping pin olduğundan harici
@@ -57,14 +57,19 @@ float BAT_DIVIDER_RATIO = (47000.0 + 10000.0) / 10000.0;  // ~5.7
 const float AC_LOST_THRESHOLD_V = 10.0;
 const unsigned long DEBOUNCE_MS = 2000;
 
+// 12V kurşun asit (VRLA) akü için kaba voltaj->SOC tablosu. Not: mains varken bu düğüm
+// şarj modülü tarafından 13.6-13.8V'a sabitlendiği için SOC okuması sadece ON_BATTERY
+// durumundayken (mains koptuğunda) anlamlıdır. Akünün dahili BMS'i olmadığından
+// SOC_LOW_THRESHOLD, LiFePO4'e göre daha erken (daha yüksek) tutuldu — derin deşarj
+// (11.5V altı) akünün ömrünü kalıcı olarak kısaltır.
 struct SocPoint { float voltage; int soc; };
 const SocPoint SOC_TABLE[] = {
-  {14.20, 100}, {13.60, 95}, {13.30, 85}, {13.20, 75},
-  {13.10, 60}, {13.00, 40}, {12.80, 20}, {12.50, 10},
-  {12.00, 5},  {10.00, 0}
+  {12.70, 100}, {12.50, 90}, {12.40, 75}, {12.30, 60},
+  {12.20, 50},  {12.10, 35}, {12.00, 25}, {11.90, 15},
+  {11.80, 5},   {11.50, 0}
 };
 const int SOC_TABLE_SIZE = sizeof(SOC_TABLE) / sizeof(SOC_TABLE[0]);
-const int SOC_LOW_THRESHOLD = 20;
+const int SOC_LOW_THRESHOLD = 25;
 
 enum UpsState { STATE_AC_OK, STATE_ON_BATTERY, STATE_ON_BATTERY_LOW };
 UpsState currentState = STATE_AC_OK;
