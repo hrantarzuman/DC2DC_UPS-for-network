@@ -18,7 +18,9 @@
 - ✅ Faz 5 (Telegram kısmı) önden alındı — firmware, ESP32'nin Wi-Fi'si üzerinden **Pi'den bağımsız**
   olarak doğrudan Telegram'a bildirim gönderiyor (Pi çökse/ağdan düşse bile bildirim gider).
 - ✅ Akü satın alındı: **Power-Xtra PX26-12, 12V 26Ah VRLA kurşun asit** (LiFePO4 yerine — 8 Eylül 2026
-  kararı, maliyet çok daha uygun). İlk şarjı yapıldı.
+  kararı, maliyet çok daha uygun).
+- ✅ **İlk şarj tamamlandı** (9 Eylül 2026) — şarj akımı ~0.25A'ya düştü (doldu eşiği), XL4015 çıkışı
+  standby/float değerine (**13.5V**) çekildi. Akü artık kalıcı kuruluma hazır.
 - ✅ **Bağlantı şeması hazır** → [DC-UPS Bağlantı Şeması](https://claude.ai/code/artifact/9c88a91e-7731-4aa1-8342-e20f013d8b7d)
   (gerilim bölücü ve LED bağlantı detaylarıyla, amatörlere hitap edecek şekilde genişletildi).
 - ✅ **Gerilim bölücüler bağlandı ve kalibre edildi** (9 Eylül 2026) — multimetre referansı: adaptör
