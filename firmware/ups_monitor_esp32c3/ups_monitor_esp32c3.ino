@@ -22,10 +22,14 @@
 // Bağlantılar:
 //   GPIO0 (ADC1_CH0) -> AC-DC şarj adaptörünün DC çıkışı (~24V), 100kohm(üst)+10kohm(alt) bölücüden sonra
 //   GPIO1 (ADC1_CH1) -> kurşun asit akü artı ucu (=ortak bara), 47kohm(üst)+10kohm(alt) bölücüden sonra
-//   GPIO7            -> Durum LED'i (+ 220-330ohm direnç, GND'ye) — harici LED kullanıyorsanız.
-//                        Kartınızda GPIO8'e bağlı onboard LED varsa onu da kullanabilirsiniz
-//                        (LED_PIN'i 8 yapın), ama GPIO8 bir strapping pin olduğundan harici
-//                        bir bağlantı EKLEMEYİN, sadece kartın kendi LED'ini kullanın.
+//   GPIO6 -> 2 renkli LED'in YEŞİL anodu (+ 220-330ohm direnç)
+//   GPIO7 -> 2 renkli LED'in KIRMIZI anodu (+ 220-330ohm direnç)
+//            LED'in ORTAK bacağı -> GND (ORTAK KATOT varsayıldı — kurulumdan önce
+//            multimetrenin diyot-test moduyla doğrulayın: siyah prob ortada, kırmızı
+//            prob dış bacakta iken LED yanıyorsa ortak katottur. Yanmıyorsa LED'iniz
+//            ORTAK ANOT'tur — bu durumda ortak bacağı GND yerine 3.3V'a bağlayın VE
+//            aşağıdaki ledOn()/ledOff() fonksiyonlarındaki HIGH/LOW değerlerini
+//            ters çevirin.
 //   USB-C            -> sadece güç ve programlama için (ayrı bir 5V kaynaktan beslenecek, BOM'a bakın)
 //
 // KALİBRASYON (kurulumdan sonra MUTLAKA yapılmalı):
@@ -43,7 +47,12 @@
 
 const int PIN_VAC = 0;
 const int PIN_VBAT = 1;
-const int PIN_LED = 7;
+const int PIN_LED_GREEN = 6;
+const int PIN_LED_RED = 7;
+
+// Ortak katot varsayıldı: HIGH = LED yanar. Ortak anot ise bu ikisini ters çevirin.
+const int LED_ON = HIGH;
+const int LED_OFF = LOW;
 
 const int ADC_SAMPLES = 32;       // ESP32 ADC gürültülü olduğundan ortalama alınır
 const float ADC_MAX_MV = 3300.0;  // 12-bit, 11dB attenuation ile tam skala ~3.3V
@@ -142,18 +151,22 @@ void updateState(float vAc, int soc) {
   }
 }
 
+// AC_OK: yeşil sabit yanık. ON_BATTERY: kırmızı yavaş yanıp söner. ON_BATTERY_LOW: kırmızı hızlı yanıp söner.
 void updateLed() {
   unsigned long now = millis();
   unsigned long interval;
 
   switch (currentState) {
     case STATE_AC_OK:
-      digitalWrite(PIN_LED, HIGH);
+      digitalWrite(PIN_LED_GREEN, LED_ON);
+      digitalWrite(PIN_LED_RED, LED_OFF);
       return;
     case STATE_ON_BATTERY:
+      digitalWrite(PIN_LED_GREEN, LED_OFF);
       interval = 500;
       break;
     case STATE_ON_BATTERY_LOW:
+      digitalWrite(PIN_LED_GREEN, LED_OFF);
       interval = 150;
       break;
     default:
@@ -163,7 +176,7 @@ void updateLed() {
   if (now - lastBlinkMs >= interval) {
     lastBlinkMs = now;
     ledOn = !ledOn;
-    digitalWrite(PIN_LED, ledOn ? HIGH : LOW);
+    digitalWrite(PIN_LED_RED, ledOn ? LED_ON : LED_OFF);
   }
 }
 
@@ -251,7 +264,8 @@ void notifyStateChangeIfNeeded(float vAc, float vBat, int soc) {
 }
 
 void setup() {
-  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_LED_GREEN, OUTPUT);
+  pinMode(PIN_LED_RED, OUTPUT);
   Serial.begin(115200);
   delay(500);
   Serial.println("UPS_MONITOR_ESP32C3_BOOT");

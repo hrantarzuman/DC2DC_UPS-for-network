@@ -73,7 +73,7 @@ zarar görebilir — Telegram'daki "DUSUK BATARYA" uyarısı geldiğinde manuel 
 | 6 | ~~Arduino Nano~~ ESP32-C3 Mini | **Zaten mevcut, satın almaya gerek yok** (Hrant'ta hazır) | 0 | — |
 | 6b | ESP32-C3 besleme bağlantısı | İkinci QCmini modülünün 5V/GND çıkış pedleri, ESP32-C3 kartının 5V/GND pinine **doğrudan lehimlenir** (kalıcı montaj için kablo/konnektöre gerek yok) | — | — |
 | 7 | Gerilim bölücü dirençler (ESP32-C3 için, 3.3V ADC tavanına göre) | AC-sense: 100kΩ+10kΩ, Bat-sense: 47kΩ+10kΩ | 1 set | "direnç seti 1/4W çeşitli değer" |
-| 8 | Durum LED'i + 220-330Ω direnç | Mains/batarya göstergesi | 1-2 | "5mm LED kırmızı yeşil" |
+| 8 | 2 renkli (kırmızı/yeşil) durum LED'i, 3 bacaklı ortak katot | **Zaten mevcut** — GPIO6 (yeşil) ve GPIO7 (kırmızı), her ikisine 220-330Ω direnç, ortak bacak → GND | 0 | ✅ Mevcut |
 | 9 | Sigortalar | 4A blade fuse + tutucu, 12V hat | 2 | "oto tipi bıçak sigorta 4A + yuva" |
 | 10 | Terminal blokları | Vidalı, 2-3 pin | 6-8 | "vidalı terminal blok PCB 2 pin" |
 | 11 | Perfboard | ~10x15cm | 1 | "delikli prototip PCB 10x15" |
@@ -121,6 +121,11 @@ ve ucuz bir modülle bu risk sıfırlanıyor.
   olduğundan bu adım burada daha da önemli.
 - Pin seçimi bilinçli yapıldı: GPIO2/8/9 gibi boot-strapping pinlerinden kaçınıldı, ADC hatları
   GPIO0/GPIO1 (ADC1, Wi-Fi ile çakışmaz) üzerinden alındı — dosya başındaki yorumda gerekçesi var.
+- **Durum LED'i 2 renkli (kırmızı/yeşil), 3 bacaklı, ortak katot:** GPIO6=yeşil (AC var=sabit yanık),
+  GPIO7=kırmızı (batarya modu=yavaş yanıp söner, düşük batarya=hızlı yanıp söner). Ortak bacak GND'ye
+  gider. **Kurulumdan önce doğrulayın:** multimetrenin diyot-test modunda siyah prob ortada, kırmızı
+  prob dış bacakta iken LED yanmıyorsa LED'iniz ortak anottur — bu durumda ortak bacağı 3.3V'a bağlayıp
+  koddaki `LED_ON`/`LED_OFF` sabitlerini ters çevirin (dosya başındaki yorumda detay var).
 - SOC tablosu **kurşun asit** akü voltaj eğrisine göre kalibre edildi (12.7V=%100 … 11.5V=%0). Bu düğüm
   mains varken şarj modülü tarafından 13.6-13.8V'a sabitlendiğinden, SOC okuması yalnızca `ON_BATTERY`
   durumundayken (mains koptuğunda) anlamlıdır. Akünün BMS'i olmadığından `SOC_LOW_THRESHOLD` %25'e
