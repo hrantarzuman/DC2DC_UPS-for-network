@@ -3,9 +3,10 @@
 // ÖNEMLİ MİMARİ NOTU: Bu firmware güç yolunu KONTROL ETMEZ. Mains/batarya geçişi
 // tamamen pasif donanımla (Schottky diyot ORing) yapılır — bir yazılım hatası asla
 // modemin/Pi'nin gücünü kesemez. Firmware'in tek görevi: durumu izlemek, LED ile
-// göstermek, ve durum değişikliklerinde Wi-Fi üzerinden doğrudan Telegram'a bildirim
+// göstermek, durum değişikliklerinde Wi-Fi üzerinden doğrudan Telegram'a bildirim
 // göndermek — Pi'nin ayakta olmasına bağımlı DEĞİLDİR (Pi çökse/ağdan düşse bile
-// bildirim gider, çünkü modem zaten bu UPS tarafından besleniyor ve Wi-Fi ayakta kalıyor).
+// bildirim gider, çünkü modem zaten bu UPS tarafından besleniyor ve Wi-Fi ayakta kalıyor) —
+// ve Telegram'dan gelen "/durum" komutuna anlık AC/batarya durumuyla cevap vermek.
 //
 // GEREKLİ KÜTÜPHANE: yok — sadece ESP32 Arduino core (WiFi.h, HTTPClient.h,
 // WiFiClientSecure.h dahili gelir). Arduino IDE'de board olarak "ESP32C3 Dev Module"
@@ -93,6 +94,11 @@ unsigned long lastReportMs = 0;
 const unsigned long REPORT_INTERVAL_MS = 5000;
 unsigned long lastBlinkMs = 0;
 bool ledOn = false;
+
+// Telegram komut dinleme (getUpdates polling)
+long lastUpdateId = 0;
+unsigned long lastPollMs = 0;
+const unsigned long POLL_INTERVAL_MS = 4000;
 
 int readAveraged(int pin) {
   long sum = 0;
@@ -198,25 +204,92 @@ void connectWifi() {
   }
 }
 
-void sendTelegramMessage(const String& text) {
+// Genel HTTPS GET yardımcı fonksiyonu — hem sendMessage hem getUpdates için kullanılır.
+// Başarılıysa yanıt gövdesini (JSON metni) döner, başarısızsa boş string döner.
+String httpGetString(const String& url) {
   if (WiFi.status() != WL_CONNECTED) {
     connectWifi();
-    if (WiFi.status() != WL_CONNECTED) return;
+    if (WiFi.status() != WL_CONNECTED) return "";
   }
 
   WiFiClientSecure client;
   client.setInsecure();  // sertifika doğrulaması atlanır — hobi projesi için kabul edilebilir
   HTTPClient http;
-
-  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) +
-               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) +
-               "&text=" + urlEncode(text);
+  String body = "";
 
   if (http.begin(client, url)) {
     int httpCode = http.GET();
-    Serial.print("Telegram gonderim sonucu: ");
-    Serial.println(httpCode);
+    if (httpCode == 200) {
+      body = http.getString();
+    }
     http.end();
+  }
+  return body;
+}
+
+void sendTelegramMessage(const String& text) {
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) +
+               "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) +
+               "&text=" + urlEncode(text);
+  String resp = httpGetString(url);
+  Serial.print("Telegram gonderim sonucu: ");
+  Serial.println(resp.length() > 0 ? "OK" : "HATA");
+}
+
+// JSON metninde "key":değer kalıbını arayıp değeri döner (basit, kütüphanesiz ayrıştırma).
+// Telegram'ın getUpdates yanıtı sabit bir formatta olduğundan bu yeterli.
+String extractJsonValue(const String& json, const String& key, bool isString) {
+  String pattern = "\"" + key + "\":";
+  int idx = json.lastIndexOf(pattern);
+  if (idx == -1) return "";
+  int start = idx + pattern.length();
+  if (isString) {
+    start = json.indexOf('"', start) + 1;
+    int end = json.indexOf('"', start);
+    if (start == 0 || end == -1) return "";
+    return json.substring(start, end);
+  } else {
+    int end = start;
+    while (end < (int)json.length() && (isDigit(json[end]) || json[end] == '-')) end++;
+    return json.substring(start, end);
+  }
+}
+
+// Boot sırasında bekleyen eski komutları TEK adımda temizler: offset=-1, Telegram'ın
+// kuyruğundaki EN SON güncellemeyi ister; lastUpdateId'yi ona göre ayarlamak, ondan
+// eski her şeyi (varsa birikmiş komutlar dahil) sunucu tarafında da confirm eder.
+void syncTelegramOffset() {
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) +
+               "/getUpdates?offset=-1&limit=1&timeout=0";
+  String resp = httpGetString(url);
+  String updateIdStr = extractJsonValue(resp, "update_id", false);
+  if (updateIdStr.length() > 0) {
+    lastUpdateId = updateIdStr.toInt();
+  }
+}
+
+// Telegram'dan gelen /durum komutunu dinler. lastUpdateId'yi her zaman günceller
+// (eski komutları tekrar işlememek için), sadece metin "/durum" ise cevap gönderir.
+void checkTelegramCommands(float vAc, float vBat, int soc) {
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) +
+               "/getUpdates?offset=" + String(lastUpdateId + 1) + "&limit=1&timeout=0";
+  String resp = httpGetString(url);
+  if (resp.length() == 0) return;
+
+  String updateIdStr = extractJsonValue(resp, "update_id", false);
+  if (updateIdStr.length() == 0) return;  // bekleyen yeni mesaj yok
+  lastUpdateId = updateIdStr.toInt();
+
+  String text = extractJsonValue(resp, "text", true);
+  text.trim();
+  if (text == "/durum" || text == "/status") {
+    String msg = "UPS Durumu:\n" +
+                 String("Durum: ") + stateName(currentState) + "\n" +
+                 "AC hatti: " + String(vAc, 2) + "V\n" +
+                 "Batarya: " + String(vBat, 2) + "V (%" + String(soc) + ")";
+    sendTelegramMessage(msg);
+  } else if (text == "/start") {
+    sendTelegramMessage("UPS izleme botu aktif. Komutlar:\n/durum - anlik AC ve batarya durumu");
   }
 }
 
@@ -271,6 +344,10 @@ void setup() {
   Serial.println("UPS_MONITOR_ESP32C3_BOOT");
   analogReadResolution(12);
   connectWifi();
+
+  // Boot öncesi bekleyen eski Telegram komutlarını sessizce temizle — aksi halde her
+  // yeniden başlatmada eski bir "/durum" komutuna gecikmeli yanıt gider.
+  syncTelegramOffset();
 }
 
 void loop() {
@@ -283,6 +360,11 @@ void loop() {
   notifyStateChangeIfNeeded(vAc, vBat, soc);
 
   unsigned long now = millis();
+  if (now - lastPollMs >= POLL_INTERVAL_MS) {
+    lastPollMs = now;
+    checkTelegramCommands(vAc, vBat, soc);
+  }
+
   if (now - lastReportMs >= REPORT_INTERVAL_MS) {
     lastReportMs = now;
     Serial.print("STATE=");

@@ -112,6 +112,10 @@ ve ucuz bir modülle bu risk sıfırlanıyor.
 
 - **Güç yolunu kontrol etmez**, sadece izler; durum değişikliklerinde (mains kaybı/dönüşü, düşük batarya)
   **doğrudan Wi-Fi üzerinden Telegram'a** bildirim gönderir — Pi'ye bağımlı değil.
+- **Telegram'dan sorgulanabilir:** bota `/durum` yazınca anlık AC hattı/batarya voltajı ve yüzdesini
+  içeren bir yanıt döner (`getUpdates` ile kütüphanesiz polling, her 4 saniyede bir kontrol edilir).
+  `/start` da kısa bir kullanım notu döner. Boot anında bekleyen eski komutlar sessizce temizlenir
+  (yeniden başlatmada gecikmeli yanıt gitmesin diye).
 - Ayrıca USB-seri üzerinden (115200 baud) durum satırı basar (`STATE=...;VAC=...;VBAT=...;SOC=...;WIFI=...`) — debug için.
 - **Kurulum öncesi zorunlu adım:** `secrets.h.example` dosyasını aynı klasörde `secrets.h` olarak
   kopyalayın, kendi Wi-Fi ve Telegram bot bilgilerinizi girin. `secrets.h` `.gitignore`'da — **asla
