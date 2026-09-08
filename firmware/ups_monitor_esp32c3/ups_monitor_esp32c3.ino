@@ -33,7 +33,8 @@
 //            ters çevirin.
 //   USB-C            -> sadece güç ve programlama için (ayrı bir 5V kaynaktan beslenecek, BOM'a bakın)
 //
-// KALİBRASYON (kurulumdan sonra MUTLAKA yapılmalı):
+// KALİBRASYON: ✅ 9 Eylül 2026'da yapıldı (bkz. AC_DIVIDER_RATIO/BAT_DIVIDER_RATIO
+// tanımlarındaki not). Farklı bir kart/direnç seti kullanırsanız tekrarlayın:
 //   1. Multimetre ile AC-DC adaptörün gerçek çıkış voltajını ölçün.
 //   2. Seri port monitöründe (115200 baud) basılan "VAC_RAW_MV" değerini okuyun.
 //   3. AC_DIVIDER_RATIO'yu gerçek_voltaj / (VAC_RAW_MV/1000) olacak şekilde güncelleyin.
@@ -59,9 +60,13 @@ const int ADC_SAMPLES = 32;       // ESP32 ADC gürültülü olduğundan ortalam
 const float ADC_MAX_MV = 3300.0;  // 12-bit, 11dB attenuation ile tam skala ~3.3V
 const int ADC_MAX_COUNT = 4095;
 
-// Teorik başlangıç değerleri — kalibrasyon sonrası güncellenecek
-float AC_DIVIDER_RATIO = (100000.0 + 10000.0) / 10000.0;  // ~11.0
-float BAT_DIVIDER_RATIO = (47000.0 + 10000.0) / 10000.0;  // ~5.7
+// KALİBRE EDİLDİ (9 Eylül 2026) — multimetre referansı: adaptör 24.0V, akü mains
+// varken 14.0V, mains yokken 13.6V. Firmware'in o anda gösterdiği (teorik oranla
+// hesaplanmış) VAC/VBAT değerleriyle karşılaştırılıp NEW = OLD × (gerçek/gösterilen)
+// formülüyle hesaplandı. Direnç toleransı + ESP32 ADC doğrusalsızlığı yüzünden
+// teorik (100k+10k=11.0, 47k+10k=5.7) değerlerden belirgin sapma normaldi.
+float AC_DIVIDER_RATIO = 9.83;
+float BAT_DIVIDER_RATIO = 5.07;
 
 // Mains kaybı algılama eşiği: adaptör ~24V, ~10V altına düşerse "kayıp" kabul edilir
 const float AC_LOST_THRESHOLD_V = 10.0;
@@ -109,10 +114,14 @@ int readAveraged(int pin) {
   return sum / ADC_SAMPLES;
 }
 
-float readVoltage(int pin, float dividerRatio) {
+// Bölücüden ÖNCEKİ, ESP32 pininin gördüğü ham gerilim (mV) — kalibrasyonda kullanılır.
+float readRawMv(int pin) {
   int raw = readAveraged(pin);
-  float vAdcMv = (raw / (float)ADC_MAX_COUNT) * ADC_MAX_MV;
-  return (vAdcMv / 1000.0) * dividerRatio;
+  return (raw / (float)ADC_MAX_COUNT) * ADC_MAX_MV;
+}
+
+float voltageFromRawMv(float rawMv, float dividerRatio) {
+  return (rawMv / 1000.0) * dividerRatio;
 }
 
 int estimateSoc(float voltage) {
@@ -351,8 +360,10 @@ void setup() {
 }
 
 void loop() {
-  float vAc = readVoltage(PIN_VAC, AC_DIVIDER_RATIO);
-  float vBat = readVoltage(PIN_VBAT, BAT_DIVIDER_RATIO);
+  float vAcRawMv = readRawMv(PIN_VAC);
+  float vBatRawMv = readRawMv(PIN_VBAT);
+  float vAc = voltageFromRawMv(vAcRawMv, AC_DIVIDER_RATIO);
+  float vBat = voltageFromRawMv(vBatRawMv, BAT_DIVIDER_RATIO);
   int soc = estimateSoc(vBat);
 
   updateState(vAc, soc);
@@ -371,8 +382,12 @@ void loop() {
     Serial.print(stateName(currentState));
     Serial.print(";VAC=");
     Serial.print(vAc, 2);
+    Serial.print(";VAC_RAW_MV=");
+    Serial.print(vAcRawMv, 1);
     Serial.print(";VBAT=");
     Serial.print(vBat, 2);
+    Serial.print(";VBAT_RAW_MV=");
+    Serial.print(vBatRawMv, 1);
     Serial.print(";SOC=");
     Serial.print(soc);
     Serial.print(";WIFI=");

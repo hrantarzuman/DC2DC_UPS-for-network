@@ -20,7 +20,13 @@
 - ✅ Akü satın alındı: **Power-Xtra PX26-12, 12V 26Ah VRLA kurşun asit** (LiFePO4 yerine — 8 Eylül 2026
   kararı, maliyet çok daha uygun). İlk şarjı yapıldı.
 - ✅ **Bağlantı şeması hazır** → [DC-UPS Bağlantı Şeması](https://claude.ai/code/artifact/9c88a91e-7731-4aa1-8342-e20f013d8b7d)
-- ⏳ Faz 3-4, 6 — Perfboard montajı, yük testi, kalıcı montaj, NETWORK_INVENTORY.md güncellemesi bekliyor.
+  (gerilim bölücü ve LED bağlantı detaylarıyla, amatörlere hitap edecek şekilde genişletildi).
+- ✅ **Gerilim bölücüler bağlandı ve kalibre edildi** (9 Eylül 2026) — multimetre referansı: adaptör
+  24.0V, akü mains varken 14.0V / yokken 13.6V. `AC_DIVIDER_RATIO=9.83`, `BAT_DIVIDER_RATIO=5.07`
+  (teorik 11.0/5.7'den belirgin sapma — direnç toleransı + ESP32 ADC doğrusalsızlığı nedeniyle beklenen).
+- ✅ Telegram `/durum` komutu eklendi — anlık AC/batarya durumu sorgulanabiliyor.
+- ⏳ Faz 3-4, 6 — Perfboard montajının geri kalanı (Schottky diyot, akü, çıkışlar), yük testi, kalıcı
+  montaj, NETWORK_INVENTORY.md güncellemesi bekliyor.
 
 ## Mimari Özeti
 
