@@ -298,13 +298,15 @@ String httpGetString(const String& url) {
   return body;
 }
 
-void sendTelegramMessage(const String& text) {
+bool sendTelegramMessage(const String& text) {
   String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) +
                "/sendMessage?chat_id=" + String(TELEGRAM_CHAT_ID) +
                "&text=" + urlEncode(text);
   String resp = httpGetString(url);
+  bool ok = resp.length() > 0;
   Serial.print("Telegram gonderim sonucu: ");
-  Serial.println(resp.length() > 0 ? "OK" : "HATA");
+  Serial.println(ok ? "OK" : "HATA");
+  return ok;
 }
 
 // JSON metninde "key":değer kalıbını arayıp değeri döner (basit, kütüphanesiz ayrıştırma).
@@ -386,8 +388,20 @@ String urlEncode(const String& str) {
   return encoded;
 }
 
+// Bekleyen (gönderilememiş) bir durum-değişikliği bildirimi varsa başarana kadar
+// birkaç saniyede bir tekrar dener — tek seferlik bir HTTPS/TLS aksaklığı yüzünden
+// kritik bir "elektrik kesildi" bildirimi sessizce kaybolmasın diye.
+bool notifyPending = false;
+unsigned long notifyLastAttemptMs = 0;
+const unsigned long NOTIFY_RETRY_MS = 5000;
+
 void notifyStateChangeIfNeeded(float vAc, float vBat, int soc) {
-  if (currentState == lastReportedState) return;
+  if (currentState != lastReportedState) notifyPending = true;
+  if (!notifyPending) return;
+
+  unsigned long now = millis();
+  if (notifyLastAttemptMs != 0 && now - notifyLastAttemptMs < NOTIFY_RETRY_MS) return;
+  notifyLastAttemptMs = now;
 
   String msg;
   switch (currentState) {
@@ -403,8 +417,10 @@ void notifyStateChangeIfNeeded(float vAc, float vBat, int soc) {
             "% (" + String(vBat, 2) + "V) - kalan sure kisitli olabilir.";
       break;
   }
-  sendTelegramMessage(msg);
-  lastReportedState = currentState;
+  if (sendTelegramMessage(msg)) {
+    lastReportedState = currentState;
+    notifyPending = false;
+  }
 }
 
 // LCD'ye anlık durumu basar. LCD bağlı değilse veya init başarısız olduysa hiçbir

@@ -163,6 +163,16 @@ kaçınıldı.
   kütüphaneleri gerekir (Library Manager'dan kurulur). Anlık AC/batarya/şarj voltajı, SOC ve
   Wi-Fi durumunu gösterir; LCD bağlı değilse veya bulunamazsa (`lcd.begin()` başarısız) firmware
   bunu görmezden gelip normal çalışmaya devam eder — LCD arızası ana izleme işlevini etkilemez.
+  **Test notu (9 Eylül 2026):** ilk LCD modülü (Heltec tipi, adres 0x78/0x3C) I2C üzerinden
+  bulunuyor ve komut kabul ediyor (besleme VCC=3.25V, SDA/SCL hatları da doğru) ama panelde hiçbir
+  piksel yanmıyor — hem SSD1306 hem SH1106 kütüphaneleriyle denendi, SH1106 `begin()` reddetti (çip
+  muhtemelen gerçekten SSD1306). Kod/kablo/besleme tarafında sorun bulunamadığından modülün
+  arızalı olduğu (örn. panel-sürücü flex bağlantısı kopuk) düşünülüyor — başka bir LCD ile
+  doğrulanacak, LCD entegrasyonu bu doğrulanana kadar donduruldu.
+- **Bug fix (9 Eylül 2026):** `notifyStateChangeIfNeeded()` önceden Telegram gönderimi başarısız
+  olsa bile durumu "bildirildi" işaretliyordu — geçici bir ağ/TLS hatası kritik bir "elektrik
+  kesildi" bildirimini sessizce kaybedebiliyordu. Artık başarısız gönderim `NOTIFY_RETRY_MS`
+  (5sn) aralıklarla başarana kadar tekrar deneniyor.
 - **Durum LED'i 2 renkli (kırmızı/yeşil), 3 bacaklı, ortak katot:** GPIO6=yeşil (AC var=sabit yanık),
   GPIO7=kırmızı (batarya modu=yavaş yanıp söner, düşük batarya=hızlı yanıp söner). Ortak bacak GND'ye
   gider. **Kurulumdan önce doğrulayın:** multimetrenin diyot-test modunda siyah prob ortada, kırmızı
