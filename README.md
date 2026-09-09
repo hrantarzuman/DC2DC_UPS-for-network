@@ -95,8 +95,9 @@ da tamamen ayrı bir düzenekle bağlanmalı.
 | 5b | USB-A (erkek) → USB-C (erkek) kablo (Pi hattı için) | Modülün USB-A çıkışını Pi'nin USB-C girişine bağlamak için | 1 | **Zaten mevcut** (Baseus marka, kısa kablo) — satın almaya gerek yok |
 | 6 | ~~Arduino Nano~~ ESP32-C3 Mini | **Zaten mevcut, satın almaya gerek yok** (Hrant'ta hazır) | 0 | — |
 | 6b | ESP32-C3 besleme bağlantısı | İkinci QCmini modülünün 5V/GND çıkış pedleri, ESP32-C3 kartının 5V/GND pinine **doğrudan lehimlenir** (kalıcı montaj için kablo/konnektöre gerek yok) | — | — |
-| 7 | Gerilim bölücü dirençler (ESP32-C3 için, 3.3V ADC tavanına göre) | AC-sense: 100kΩ+10kΩ, Bat-sense: 47kΩ+10kΩ | 1 set | "direnç seti 1/4W çeşitli değer" |
+| 7 | Gerilim bölücü dirençler (ESP32-C3 için, 3.3V ADC tavanına göre) | AC-sense: 100kΩ+10kΩ (GPIO0), Bat-sense: 47kΩ+10kΩ (GPIO1), Chg-sense: 47kΩ+10kΩ (GPIO3, diyottan önceki şarj çıkışı) | 1 set | "direnç seti 1/4W çeşitli değer" |
 | 8 | 2 renkli (kırmızı/yeşil) durum LED'i, 3 bacaklı ortak katot | **Zaten mevcut** — GPIO6 (yeşil) ve GPIO7 (kırmızı), her ikisine 220-330Ω direnç, ortak bacak → GND | 0 | ✅ Mevcut |
+| 15 | 128x64 I2C LCD (SSD1306) | GPIO10=SDA, GPIO20=SCL, VCC→3.3V, GND→ortak GND | 1 | "0.96 inc OLED I2C 128x64 SSD1306" |
 | 9 | Sigortalar | 4A blade fuse + tutucu, 12V hat | 2 | "oto tipi bıçak sigorta 4A + yuva" |
 | 10 | Terminal blokları | Vidalı, 2-3 pin | 6-8 | "vidalı terminal blok PCB 2 pin" |
 | 11 | Perfboard | ~10x15cm | 1 | "delikli prototip PCB 10x15" |
@@ -128,6 +129,12 @@ için ayrı bir 5V besleme hattı (#6b) öneriliyor — Pi'nin step-down modül�
 Wi-Fi verici darbelerinin (TX burst) yarattığı gerilim düşüşünün Pi'yi etkilemesi riskini taşır; ayrı
 ve ucuz bir modülle bu risk sıfırlanıyor.
 
+**Karar (#15, 9 Eylül 2026):** Akünün şarj olurken diyottan önceki çıkış voltajını da izlemek için
+üçüncü bir gerilim bölücü eklendi. İlk denemede GPIO2'ye bağlanmıştı — bu bir boot-strapping pini
+olduğundan (bkz. Firmware notları) GPIO3'e taşındı. Ayrıca 128x64 I2C LCD eklenmesine karar verildi
+(GPIO10=SDA, GPIO20=SCL) — kartın kendi BOOT tuşu (GPIO9) ve dahili LED'ine (GPIO8) bağlı pinlerden
+kaçınıldı.
+
 ## Firmware
 
 `firmware/ups_monitor_esp32c3/ups_monitor_esp32c3.ino` — ESP32-C3 Mini üzerinde çalışır
@@ -143,11 +150,19 @@ ve ucuz bir modülle bu risk sıfırlanıyor.
 - **Kurulum öncesi zorunlu adım:** `secrets.h.example` dosyasını aynı klasörde `secrets.h` olarak
   kopyalayın, kendi Wi-Fi ve Telegram bot bilgilerinizi girin. `secrets.h` `.gitignore`'da — **asla
   GitHub'a gitmez**, sırlarınız güvende kalır.
-- **Kurulumdan sonra MUTLAKA** `AC_DIVIDER_RATIO` ve `BAT_DIVIDER_RATIO` sabitlerini multimetre ile
-  kalibre edin (dosya içi yorumlarda adımlar var) — ESP32'nin ADC'si AVR'ye göre daha az doğrusal
-  olduğundan bu adım burada daha da önemli.
-- Pin seçimi bilinçli yapıldı: GPIO2/8/9 gibi boot-strapping pinlerinden kaçınıldı, ADC hatları
-  GPIO0/GPIO1 (ADC1, Wi-Fi ile çakışmaz) üzerinden alındı — dosya başındaki yorumda gerekçesi var.
+- **Kurulumdan sonra MUTLAKA** `AC_DIVIDER_RATIO`, `BAT_DIVIDER_RATIO` ve `CHG_DIVIDER_RATIO`
+  sabitlerini multimetre ile kalibre edin (dosya içi yorumlarda adımlar var) — ESP32'nin ADC'si
+  AVR'ye göre daha az doğrusal olduğundan bu adım burada daha da önemli. `CHG_DIVIDER_RATIO`,
+  `BAT_DIVIDER_RATIO` ile aynı direnç çiftini kullandığından başlangıçta ondan kopyalandı ama
+  farklı bir düğüm olduğu için ayrı kalibre edilmeli.
+- Pin seçimi bilinçli yapıldı: GPIO2/8/9 gibi boot-strapping pinlerinden kaçınıldı (bu karttaki
+  GPIO9 doğrudan BOOT tuşu, GPIO8 kartın dahili LED'ine bağlı) — ADC hatları GPIO0/GPIO1/GPIO3
+  (ADC1, Wi-Fi ile çakışmaz), I2C hatları GPIO10/GPIO20 üzerinden alındı — dosya başındaki yorumda
+  gerekçesi var.
+- **128x64 I2C LCD (SSD1306):** GPIO10=SDA, GPIO20=SCL. `Adafruit_SSD1306` + `Adafruit_GFX`
+  kütüphaneleri gerekir (Library Manager'dan kurulur). Anlık AC/batarya/şarj voltajı, SOC ve
+  Wi-Fi durumunu gösterir; LCD bağlı değilse veya bulunamazsa (`lcd.begin()` başarısız) firmware
+  bunu görmezden gelip normal çalışmaya devam eder — LCD arızası ana izleme işlevini etkilemez.
 - **Durum LED'i 2 renkli (kırmızı/yeşil), 3 bacaklı, ortak katot:** GPIO6=yeşil (AC var=sabit yanık),
   GPIO7=kırmızı (batarya modu=yavaş yanıp söner, düşük batarya=hızlı yanıp söner). Ortak bacak GND'ye
   gider. **Kurulumdan önce doğrulayın:** multimetrenin diyot-test modunda siyah prob ortada, kırmızı

@@ -8,29 +8,39 @@
 // bildirim gider, çünkü modem zaten bu UPS tarafından besleniyor ve Wi-Fi ayakta kalıyor) —
 // ve Telegram'dan gelen "/durum" komutuna anlık AC/batarya durumuyla cevap vermek.
 //
-// GEREKLİ KÜTÜPHANE: yok — sadece ESP32 Arduino core (WiFi.h, HTTPClient.h,
-// WiFiClientSecure.h dahili gelir). Arduino IDE'de board olarak "ESP32C3 Dev Module"
-// (Boards Manager: "esp32" by Espressif Systems) seçin.
+// GEREKLİ KÜTÜPHANE: Adafruit_SSD1306 + Adafruit_GFX (Library Manager'dan kurun) —
+// 128x64 I2C LCD içindir. Bunun dışında sadece ESP32 Arduino core (WiFi.h,
+// HTTPClient.h, WiFiClientSecure.h, Wire.h dahili gelir). Arduino IDE'de board
+// olarak "ESP32C3 Dev Module" (Boards Manager: "esp32" by Espressif Systems) seçin.
 //
 // SIR YÖNETİMİ: secrets.h.example dosyasını "secrets.h" olarak kopyalayıp kendi
 // Wi-Fi/Telegram bilgilerinizi girin. secrets.h .gitignore'da — asla GitHub'a gitmez.
 //
 // PIN SEÇİMİ NEDENİ (ESP32-C3 için önemli): GPIO2, GPIO8, GPIO9 boot-strapping
 // pinleridir — boot sırasında belirli seviyelerde olmaları gerekir, bu yüzden analog
-// sense hatları için KULLANILMADI. Bunun yerine ADC1 kanalları (Wi-Fi ile çakışmayan)
-// GPIO0 ve GPIO1 seçildi.
+// sense hatları VE I2C için KULLANILMADI (bu karttaki GPIO9 doğrudan BOOT tuşu,
+// GPIO8 kartın dahili LED'ine bağlı). Bunun yerine ADC1 kanalları GPIO0/GPIO1/GPIO3,
+// I2C için de strapping olmayan GPIO10/GPIO20 seçildi.
 //
 // Bağlantılar:
-//   GPIO0 (ADC1_CH0) -> AC-DC şarj adaptörünün DC çıkışı (~24V), 100kohm(üst)+10kohm(alt) bölücüden sonra
-//   GPIO1 (ADC1_CH1) -> kurşun asit akü artı ucu (=ortak bara), 47kohm(üst)+10kohm(alt) bölücüden sonra
-//   GPIO6 -> 2 renkli LED'in YEŞİL anodu (+ 220-330ohm direnç)
-//   GPIO7 -> 2 renkli LED'in KIRMIZI anodu (+ 220-330ohm direnç)
+//   GPIO0  (ADC1_CH0) -> AC-DC şarj adaptörünün DC çıkışı (~24V), 100kohm(üst)+10kohm(alt) bölücüden sonra
+//   GPIO1  (ADC1_CH1) -> kurşun asit akü artı ucu (=ortak bara), 47kohm(üst)+10kohm(alt) bölücüden sonra
+//   GPIO3  (ADC1_CH3) -> şarj devresinin diyottan ÖNCEKİ çıkışı, 47kohm(üst)+10kohm(alt) bölücüden sonra
+//                         (akü şarj olurken buradaki gerilimi izlemek için — GPIO2'YE DEĞİL, o strapping pini)
+//   GPIO6  -> 2 renkli LED'in YEŞİL anodu (+ 220-330ohm direnç)
+//   GPIO7  -> 2 renkli LED'in KIRMIZI anodu (+ 220-330ohm direnç)
 //            LED'in ORTAK bacağı -> GND (ORTAK KATOT varsayıldı — kurulumdan önce
 //            multimetrenin diyot-test moduyla doğrulayın: siyah prob ortada, kırmızı
 //            prob dış bacakta iken LED yanıyorsa ortak katottur. Yanmıyorsa LED'iniz
 //            ORTAK ANOT'tur — bu durumda ortak bacağı GND yerine 3.3V'a bağlayın VE
 //            aşağıdaki ledOn()/ledOff() fonksiyonlarındaki HIGH/LOW değerlerini
 //            ters çevirin.
+//   GPIO10 -> 128x64 I2C LCD'nin SDA'sı
+//   GPIO20 -> 128x64 I2C LCD'nin SCL'i
+//            LCD modülünün VCC'si 3.3V'a, GND'si ortak GND'ye bağlanmalı (çoğu
+//            SSD1306 modülü 3.3-5V toleranslıdır ama ESP32-C3'ün I2C hattı 3.3V
+//            mantık seviyesindedir — modülünüz sadece 5V mantık kabul ediyorsa
+//            seviye kaydırıcı (level shifter) gerekir).
 //   USB-C            -> sadece güç ve programlama için (ayrı bir 5V kaynaktan beslenecek, BOM'a bakın)
 //
 // KALİBRASYON: ✅ 9 Eylül 2026'da yapıldı (bkz. AC_DIVIDER_RATIO/BAT_DIVIDER_RATIO
@@ -45,12 +55,24 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include "secrets.h"
 
 const int PIN_VAC = 0;
 const int PIN_VBAT = 1;
+const int PIN_VCHG = 3;
 const int PIN_LED_GREEN = 6;
 const int PIN_LED_RED = 7;
+
+const int PIN_I2C_SDA = 10;
+const int PIN_I2C_SCL = 20;
+const int LCD_WIDTH = 128;
+const int LCD_HEIGHT = 64;
+const int LCD_I2C_ADDR = 0x3C;  // çoğu 128x64 SSD1306 modülünde bu adres kullanılır; ekran açılmazsa 0x3D deneyin
+Adafruit_SSD1306 lcd(LCD_WIDTH, LCD_HEIGHT, &Wire, -1);
+bool lcdReady = false;
 
 // Ortak katot varsayıldı: HIGH = LED yanar. Ortak anot ise bu ikisini ters çevirin.
 const int LED_ON = HIGH;
@@ -67,6 +89,12 @@ const int ADC_MAX_COUNT = 4095;
 // teorik (100k+10k=11.0, 47k+10k=5.7) değerlerden belirgin sapma normaldi.
 float AC_DIVIDER_RATIO = 9.83;
 float BAT_DIVIDER_RATIO = 5.08427;
+
+// GPIO3 şarj bölücüsü BAT ile aynı direnç çiftini kullanıyor (47k+10k), bu yüzden
+// başlangıç değeri olarak BAT_DIVIDER_RATIO kopyalandı — ama farklı bir fiziksel
+// düğüm (şarj devresinin diyottan önceki çıkışı) olduğundan AYRI kalibre edilmeli:
+// VCHG_RAW_MV'yi serial monitörden okuyup gerçek multimetre değeriyle karşılaştırın.
+float CHG_DIVIDER_RATIO = 5.08427;
 
 // Mains kaybı algılama eşiği: adaptör ~24V, ~10V altına düşerse "kayıp" kabul edilir
 const float AC_LOST_THRESHOLD_V = 10.0;
@@ -379,6 +407,35 @@ void notifyStateChangeIfNeeded(float vAc, float vBat, int soc) {
   lastReportedState = currentState;
 }
 
+// LCD'ye anlık durumu basar. LCD bağlı değilse veya init başarısız olduysa hiçbir
+// şey yapmaz (lcdReady false) — LCD arızası/eksikliği ana izleme işlevini etkilemez.
+void updateLcd(float vAc, float vBat, float vChg, int soc) {
+  if (!lcdReady) return;
+  lcd.clearDisplay();
+  lcd.setTextSize(1);
+  lcd.setTextColor(SSD1306_WHITE);
+  lcd.setCursor(0, 0);
+  lcd.print("UPS: ");
+  lcd.println(stateName(currentState));
+  lcd.setCursor(0, 16);
+  lcd.print("AC : ");
+  lcd.print(vAc, 1);
+  lcd.println("V");
+  lcd.setCursor(0, 28);
+  lcd.print("BAT: ");
+  lcd.print(vBat, 1);
+  lcd.print("V  %");
+  lcd.println(soc);
+  lcd.setCursor(0, 40);
+  lcd.print("CHG: ");
+  lcd.print(vChg, 1);
+  lcd.println("V");
+  lcd.setCursor(0, 52);
+  lcd.print("WiFi: ");
+  lcd.println(WiFi.status() == WL_CONNECTED ? "OK" : "YOK");
+  lcd.display();
+}
+
 void setup() {
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_RED, OUTPUT);
@@ -386,6 +443,20 @@ void setup() {
   delay(500);
   Serial.println("UPS_MONITOR_ESP32C3_BOOT");
   analogReadResolution(12);
+
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+  lcdReady = lcd.begin(SSD1306_SWITCHCAPVCC, LCD_I2C_ADDR);
+  if (lcdReady) {
+    lcd.clearDisplay();
+    lcd.setTextSize(1);
+    lcd.setTextColor(SSD1306_WHITE);
+    lcd.setCursor(0, 0);
+    lcd.println("UPS baslatiliyor...");
+    lcd.display();
+  } else {
+    Serial.println("LCD bulunamadi (0x3C) - LCD'siz devam ediliyor");
+  }
+
   connectWifi();
 
   // Boot öncesi bekleyen eski Telegram komutlarını sessizce temizle — aksi halde her
@@ -396,12 +467,15 @@ void setup() {
 void loop() {
   float vAcRawMv = readRawMv(PIN_VAC);
   float vBatRawMv = readRawMv(PIN_VBAT);
+  float vChgRawMv = readRawMv(PIN_VCHG);
   float vAc = voltageFromRawMv(vAcRawMv, AC_DIVIDER_RATIO);
   float vBat = voltageFromRawMv(vBatRawMv, BAT_DIVIDER_RATIO);
+  float vChg = voltageFromRawMv(vChgRawMv, CHG_DIVIDER_RATIO);
   int soc = estimateSoc(vBat);
 
   updateState(vAc, soc);
   updateLed();
+  updateLcd(vAc, vBat, vChg, soc);
   notifyStateChangeIfNeeded(vAc, vBat, soc);
 
   unsigned long now = millis();
@@ -422,6 +496,10 @@ void loop() {
     Serial.print(vBat, 2);
     Serial.print(";VBAT_RAW_MV=");
     Serial.print(vBatRawMv, 1);
+    Serial.print(";VCHG=");
+    Serial.print(vChg, 2);
+    Serial.print(";VCHG_RAW_MV=");
+    Serial.print(vChgRawMv, 1);
     Serial.print(";SOC=");
     Serial.print(soc);
     Serial.print(";WIFI=");
