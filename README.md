@@ -212,3 +212,23 @@ kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
 6. Modem+Pi'yi devreye bağlayıp fiş çekme testiyle switchover'ı doğrula, gerçek runtime'ı ölç.
 7. Kalıcı montaj (proje kutusu, sigortalama, etiketleme).
 8. `network-docs` reposundaki `NETWORK_INVENTORY.md` ve `CLAUDE.md`'yi güncelle, bu repoya link ver.
+
+## İlham alınan projeler
+
+Bu proje sıfırdan tasarlandı ama başlarken şu 4 açık kaynak DC-UPS reposu incelendi ve
+fikir/mimari açısından esinlenildi — teşekkürler:
+
+- [TobleMiner/DC-UPS](https://github.com/TobleMiner/DC-UPS)
+- [dilshan/12v-automatic-ups](https://github.com/dilshan/12v-automatic-ups)
+- [issus/UninterruptableDCPowerSupply12V](https://github.com/issus/UninterruptableDCPowerSupply12V)
+- [8bitmcu/mcuups](https://github.com/8bitmcu/mcuups)
+
+## Katkıda bulunma
+
+Fikir, hata bildirimi veya iyileştirme önerisi için issue/PR açmaktan çekinmeyin — özellikle
+BOM'da daha uygun/kolay bulunan parça alternatifleri, firmware'e eklenebilecek özellikler veya
+farklı modem/Pi kombinasyonlarına uyarlama önerileri memnuniyetle karşılanır.
+
+## Lisans
+
+[MIT](LICENSE)
