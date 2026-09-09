@@ -9,6 +9,22 @@
 > projesi olarak bu repoda tutuluyor. Ağ envanteriyle ilgili genel bağlam için `network-docs`
 > reposundaki `CLAUDE.md` ve `NETWORK_INVENTORY.md` dosyalarına bakın.
 
+## Fotoğraflar
+
+<table>
+<tr>
+<td><img src="images/ups-montaj-1.jpg" width="260" alt="Perfboard üzerinde UPS montajı, akü ve step-down modülleriyle"><br><sub>Perfboard montajı — akü, XL4015 şarj modülü, 2x QCmini step-down, ESP32-C3</sub></td>
+<td><img src="images/ups-montaj-2.jpg" width="260" alt="Perfboard üzerinde UPS montajı, farklı açı"><br><sub>Aynı montaj, farklı açı</sub></td>
+</tr>
+<tr>
+<td><img src="images/http-sayfasi-ac-ok.png" width="260" alt="HTTP durum sayfası, AC_OK durumu"><br><sub>HTTP durum sayfası — AC_OK</sub></td>
+<td><img src="images/http-sayfasi-on-battery.png" width="260" alt="HTTP durum sayfası, ON_BATTERY durumu"><br><sub>HTTP durum sayfası — ON_BATTERY (kesinti sayacı görünüyor)</sub></td>
+</tr>
+</table>
+
+<img src="images/telegram-bot-ornegi.png" width="320" alt="Telegram botu örnek konuşma">
+<br><sub>Telegram botu — /start, /durum ve otomatik durum değişikliği bildirimleri</sub>
+
 ## Durum (8 Eylül 2026)
 
 - ✅ Faz 0 — Tüketim tahmini: Pi ~3-4W (ölçülmüş), modem 12V/2.5A (30W) adaptör tavanı worst-case kabul edildi.
