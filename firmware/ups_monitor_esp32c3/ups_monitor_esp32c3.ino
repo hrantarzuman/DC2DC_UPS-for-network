@@ -66,7 +66,7 @@ const int ADC_MAX_COUNT = 4095;
 // formülüyle hesaplandı. Direnç toleransı + ESP32 ADC doğrusalsızlığı yüzünden
 // teorik (100k+10k=11.0, 47k+10k=5.7) değerlerden belirgin sapma normaldi.
 float AC_DIVIDER_RATIO = 9.83;
-float BAT_DIVIDER_RATIO = 5.07;
+float BAT_DIVIDER_RATIO = 5.08427;
 
 // Mains kaybı algılama eşiği: adaptör ~24V, ~10V altına düşerse "kayıp" kabul edilir
 const float AC_LOST_THRESHOLD_V = 10.0;
