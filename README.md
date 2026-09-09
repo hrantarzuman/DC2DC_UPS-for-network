@@ -27,6 +27,12 @@
   24.0V, akü mains varken 14.0V / yokken 13.6V. `AC_DIVIDER_RATIO=9.83`, `BAT_DIVIDER_RATIO=5.07`
   (teorik 11.0/5.7'den belirgin sapma — direnç toleransı + ESP32 ADC doğrusalsızlığı nedeniyle beklenen).
 - ✅ Telegram `/durum` komutu eklendi — anlık AC/batarya durumu sorgulanabiliyor.
+- ✅ **SOC tablosu üreticinin resmi datasheet'ine göre düzeltildi** (9 Eylül 2026) — gerçek testte
+  10 dakikalık bir kesintide SOC %100→%55→%68→%100 sıçraması görüldü; sebep kapasite kaybı değil,
+  kurşun asidin "surface charge" (yüzey şarjı) olgusu — mains kesilince voltaj birkaç dakika gerçekte
+  olduğundan düşük görünüyor. SOC_TABLE, Power-Xtra PX26-12B datasheet'inin resmi 20 saatlik deşarj
+  bitiş voltajına (10.50V=%0) göre düzleştirildi, ON_BATTERY↔ON_BATTERY_LOW geçişine 1 dakikalık ayrı
+  bir debounce eklendi (anlık dalgalanmadan Telegram spam'i gitmesin diye).
 - ⏳ Faz 3-4, 6 — Perfboard montajının geri kalanı (Schottky diyot, akü, çıkışlar), yük testi, kalıcı
   montaj, NETWORK_INVENTORY.md güncellemesi bekliyor.
 
