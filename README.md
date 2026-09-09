@@ -173,6 +173,11 @@ kaçınıldı.
   olsa bile durumu "bildirildi" işaretliyordu — geçici bir ağ/TLS hatası kritik bir "elektrik
   kesildi" bildirimini sessizce kaybedebiliyordu. Artık başarısız gönderim `NOTIFY_RETRY_MS`
   (5sn) aralıklarla başarana kadar tekrar deneniyor.
+- **Bug fix (9 Eylül 2026):** `connectWifi()`, `httpGetString()` her çağrıldığında (poll +
+  bildirim denemeleri) WiFi kopuksa tekrar tetikleniyordu; önceki deneme ESP-IDF içinde tam
+  çözülmeden yenisi başlatılınca sürücü `"cannot set config"` hatasıyla kilitlenip sürekli
+  bağlanamama döngüsüne giriyordu. `WIFI_RETRY_COOLDOWN_MS` (10sn) ile art arda çağrılara karşı
+  soğuma süresi eklendi.
 - **Durum LED'i 2 renkli (kırmızı/yeşil), 3 bacaklı, ortak katot:** GPIO6=yeşil (AC var=sabit yanık),
   GPIO7=kırmızı (batarya modu=yavaş yanıp söner, düşük batarya=hızlı yanıp söner). Ortak bacak GND'ye
   gider. **Kurulumdan önce doğrulayın:** multimetrenin diyot-test modunda siyah prob ortada, kırmızı

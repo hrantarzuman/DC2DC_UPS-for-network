@@ -257,7 +257,19 @@ void updateLed() {
   }
 }
 
+// httpGetString() her çağrıldığında (poll, bildirim denemesi/tekrar denemesi) WiFi
+// kopuksa bu fonksiyonu çağırır. Önceki deneme ESP-IDF içinde tam çözülmeden yenisi
+// başlatılırsa sürücü "cannot set config" hatası verip kilitlenebiliyor — bu yüzden
+// art arda çağrılara karşı bir soğuma süresi var; zaten bağlıysa hiçbir şey yapmaz.
+unsigned long lastWifiAttemptMs = 0;
+const unsigned long WIFI_RETRY_COOLDOWN_MS = 10000;
+
 void connectWifi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+  unsigned long now = millis();
+  if (lastWifiAttemptMs != 0 && now - lastWifiAttemptMs < WIFI_RETRY_COOLDOWN_MS) return;
+  lastWifiAttemptMs = now;
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Wi-Fi baglaniyor");
