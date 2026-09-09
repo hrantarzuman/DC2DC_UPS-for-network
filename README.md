@@ -97,7 +97,7 @@ da tamamen ayrı bir düzenekle bağlanmalı.
 | 6b | ESP32-C3 besleme bağlantısı | İkinci QCmini modülünün 5V/GND çıkış pedleri, ESP32-C3 kartının 5V/GND pinine **doğrudan lehimlenir** (kalıcı montaj için kablo/konnektöre gerek yok) | — | — |
 | 7 | Gerilim bölücü dirençler (ESP32-C3 için, 3.3V ADC tavanına göre) | AC-sense: 100kΩ+10kΩ (GPIO0), Bat-sense: 47kΩ+10kΩ (GPIO1), Chg-sense: 47kΩ+10kΩ (GPIO3, diyottan önceki şarj çıkışı) | 1 set | "direnç seti 1/4W çeşitli değer" |
 | 8 | 2 renkli (kırmızı/yeşil) durum LED'i, 3 bacaklı ortak katot | **Zaten mevcut** — GPIO6 (yeşil) ve GPIO7 (kırmızı), her ikisine 220-330Ω direnç, ortak bacak → GND | 0 | ✅ Mevcut |
-| 15 | 128x64 I2C LCD (SSD1306) | GPIO4=SDA, GPIO5=SCL, VCC→3.3V, GND→ortak GND | 1 | "0.96 inc OLED I2C 128x64 SSD1306" |
+| 15 | ~~128x64 I2C LCD (SSD1306)~~ | **Vazgeçildi** (9 Eylül 2026) — modül arızalı çıktı, ayrıca LCD bağlıyken WiFi bağlanamıyordu. Yerine ESP32'nin kendi WiFi'si üzerinden HTTP durum sayfası eklendi (bkz. Firmware) | 0 | ❌ Vazgeçildi |
 | 9 | Sigortalar | 4A blade fuse + tutucu, 12V hat | 2 | "oto tipi bıçak sigorta 4A + yuva" |
 | 10 | Terminal blokları | Vidalı, 2-3 pin | 6-8 | "vidalı terminal blok PCB 2 pin" |
 | 11 | Perfboard | ~10x15cm | 1 | "delikli prototip PCB 10x15" |
@@ -131,9 +131,9 @@ ve ucuz bir modülle bu risk sıfırlanıyor.
 
 **Karar (#15, 9 Eylül 2026):** Akünün şarj olurken diyottan önceki çıkış voltajını da izlemek için
 üçüncü bir gerilim bölücü eklendi. İlk denemede GPIO2'ye bağlanmıştı — bu bir boot-strapping pini
-olduğundan (bkz. Firmware notları) GPIO3'e taşındı. Ayrıca 128x64 I2C LCD eklenmesine karar verildi
-(GPIO4=SDA, GPIO5=SCL, bkz. güncel test notu) — kartın kendi BOOT tuşu (GPIO9) ve dahili LED'ine (GPIO8) bağlı pinlerden
-kaçınıldı.
+olduğundan (bkz. Firmware notları) GPIO3'e taşındı. 128x64 I2C LCD eklenmesi denendi, sonra
+tamamen vazgeçildi (arızalı modül + WiFi'yi kilitlemesi, bkz. Firmware notları) — yerine ESP32'nin
+kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
 
 ## Firmware
 
@@ -157,31 +157,25 @@ kaçınıldı.
   farklı bir düğüm olduğu için ayrı kalibre edilmeli.
 - Pin seçimi bilinçli yapıldı: GPIO2/8/9 gibi boot-strapping pinlerinden kaçınıldı (bu karttaki
   GPIO9 doğrudan BOOT tuşu, GPIO8 kartın dahili LED'ine bağlı) — ADC hatları GPIO0/GPIO1/GPIO3
-  (ADC1, Wi-Fi ile çakışmaz), I2C hatları GPIO4/GPIO5 üzerinden alındı — dosya başındaki yorumda
-  gerekçesi var.
-- **128x64 I2C LCD (SSD1306):** GPIO4=SDA, GPIO5=SCL (önceki GPIO10/GPIO20 denemesinde LCD
-  bağlıyken WiFi bağlanamıyordu, aşağıdaki teste bakın — GPIO4/5 ile tekrar deneniyor).
-  `Adafruit_SSD1306` + `Adafruit_GFX`
-  kütüphaneleri gerekir (Library Manager'dan kurulur). Anlık AC/batarya/şarj voltajı, SOC ve
-  Wi-Fi durumunu gösterir; LCD bağlı değilse veya bulunamazsa (`lcd.begin()` başarısız) firmware
-  bunu görmezden gelip normal çalışmaya devam eder — LCD arızası ana izleme işlevini etkilemez.
-  **Test notu (9 Eylül 2026):** ilk LCD modülü (Heltec tipi, adres 0x78/0x3C) I2C üzerinden
-  bulunuyor ve komut kabul ediyor (besleme VCC=3.25V, SDA/SCL hatları da doğru) ama panelde hiçbir
-  piksel yanmıyor — hem SSD1306 hem SH1106 kütüphaneleriyle denendi, SH1106 `begin()` reddetti (çip
-  muhtemelen gerçekten SSD1306). Kod/kablo/besleme tarafında sorun bulunamadığından modülün
-  arızalı olduğu (örn. panel-sürücü flex bağlantısı kopuk) düşünülüyor — başka bir LCD ile
-  doğrulanacak, LCD entegrasyonu bu doğrulanana kadar donduruldu.
-  **ÖNEMLİ EK BULGU:** aynı test sürecinde ESP32-C3 WiFi'ye hiçbir ağa (ev ağı, misafir ağı,
-  telefon hotspot'u dahil) bağlanamaz hale geldi — tarama (scan) çalışıyordu ama bağlanma
-  (association) sürekli başarısız oluyordu (`WL_DISCONNECTED`). Tam flash silme, kablo/port
-  değişikliği, güç kaynağı izolasyonu denendi, hiçbiri çözmedi. **LCD'yi fiziksel olarak söküp
-  çıkarınca WiFi anında normal bağlandı.** Muhtemel sebep: LCD'nin (özellikle OLED boost/charge-
-  pump devresinin) ek akım çekişi, WiFi bağlanma anındaki kısa yüksek-akım darbelerinde zaten
-  sınırda olan 3.3V regülatörünü çökertiyor OLABİLİR; ayrıca OLED'in anahtarlamalı yükseltici
-  devresinin ürettiği EMI, yakın duran 2.4GHz antenini etkiliyor OLABİLİR. **Sonraki LCD
-  denemesinde:** LCD'nin VCC/GND hattına yakın bir kapasitör (100-470µF elektrolitik + 0.1µF
-  seramik) eklenmeli ve LCD, ESP32'nin anten bölgesinden (USB konnektörüne yakın köşe) fiziksel
-  olarak uzak tutulmalı — bu olmadan LCD bağlıyken WiFi/Telegram işlevi çalışmayabilir.
+  (ADC1, Wi-Fi ile çakışmaz) üzerinden alındı — dosya başındaki yorumda gerekçesi var.
+- **LCD'den vazgeçildi (9 Eylül 2026):** 128x64 I2C LCD (SSD1306) denendi (önce GPIO2, sonra
+  GPIO10/20, sonra GPIO4/5) ama iki sorun çıktı: (1) LCD modülünün kendisi arızalı çıktı — I2C
+  üzerinden bulunuyor, komut kabul ediyor, besleme/hat voltajları doğru ölçülüyor ama panelde
+  hiçbir piksel yanmıyordu (hem SSD1306 hem SH1106 kütüphaneleriyle denendi); (2) daha önemlisi,
+  LCD bağlıyken ESP32-C3 **hiçbir WiFi ağına bağlanamaz hale geliyordu** (ev ağı, misafir ağı,
+  telefon hotspot'u dahil) — tarama çalışıyordu ama bağlanma sürekli başarısız oluyordu
+  (`WL_DISCONNECTED`); tam flash silme, kablo/port değişikliği, güç kaynağı izolasyonu hiçbiri
+  çözmedi, **LCD'yi fiziksel olarak söküp çıkarınca WiFi anında normal bağlandı**. Muhtemel sebep:
+  LCD'nin (özellikle OLED boost/charge-pump devresinin) ek akım çekişi, WiFi bağlanma anındaki
+  kısa yüksek-akım darbelerinde zaten sınırda olan 3.3V regülatörünü çökertiyor OLABİLİR; ayrıca
+  OLED'in anahtarlamalı yükseltici devresinin ürettiği EMI, yakın duran 2.4GHz antenini etkiliyor
+  OLABİLİR. Bu iki sorun üst üste binince LCD fikrinden tamamen vazgeçildi.
+- **Yerine: HTTP durum sayfası.** Firmware artık `WebServer` (ESP32 Arduino core'da dahili, ek
+  kütüphane gerekmez) ile 80 portunda basit bir durum sayfası sunuyor — telefon/PC tarayıcısından
+  aynı WiFi ağındayken `http://<esp32-ip>/` adresine girerek AC/batarya/şarj voltajı, SOC ve UPS
+  durumunu görebilirsiniz (sayfa 5 saniyede bir kendini otomatik yeniler). IP adresi WiFi
+  bağlanınca seri porta basılır. Zaten çalışan WiFi altyapısını kullandığından LCD'nin getirdiği
+  donanım/güç riskini taşımaz.
 - **Bug fix (9 Eylül 2026):** `notifyStateChangeIfNeeded()` önceden Telegram gönderimi başarısız
   olsa bile durumu "bildirildi" işaretliyordu — geçici bir ağ/TLS hatası kritik bir "elektrik
   kesildi" bildirimini sessizce kaybedebiliyordu. Artık başarısız gönderim `NOTIFY_RETRY_MS`

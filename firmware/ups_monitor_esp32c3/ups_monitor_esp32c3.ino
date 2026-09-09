@@ -7,22 +7,26 @@
 // göndermek — Pi'nin ayakta olmasına bağımlı DEĞİLDİR (Pi çökse/ağdan düşse bile
 // bildirim gider, çünkü modem zaten bu UPS tarafından besleniyor ve Wi-Fi ayakta kalıyor) —
 // ve Telegram'dan gelen "/durum" komutuna anlık AC/batarya durumuyla cevap vermek.
+// Ayrıca yerel ağdaki herhangi bir cihazdan (telefon dahil) http://<esp32-ip>/
+// adresiyle görüntülenebilen basit bir durum sayfası sunar (bkz. WebServer).
 //
-// GEREKLİ KÜTÜPHANE: Adafruit_SSD1306 + Adafruit_GFX (Library Manager'dan kurun) —
-// 128x64 I2C LCD içindir. Bunun dışında sadece ESP32 Arduino core (WiFi.h,
-// HTTPClient.h, WiFiClientSecure.h, Wire.h dahili gelir). Arduino IDE'de board
-// olarak "ESP32C3 Dev Module" (Boards Manager: "esp32" by Espressif Systems) seçin.
+// GEREKLİ KÜTÜPHANE: yok — sadece ESP32 Arduino core (WiFi.h, HTTPClient.h,
+// WiFiClientSecure.h, WebServer.h dahili gelir). Arduino IDE'de board olarak
+// "ESP32C3 Dev Module" (Boards Manager: "esp32" by Espressif Systems) seçin.
 //
 // SIR YÖNETİMİ: secrets.h.example dosyasını "secrets.h" olarak kopyalayıp kendi
 // Wi-Fi/Telegram bilgilerinizi girin. secrets.h .gitignore'da — asla GitHub'a gitmez.
 //
 // PIN SEÇİMİ NEDENİ (ESP32-C3 için önemli): GPIO2, GPIO8, GPIO9 boot-strapping
 // pinleridir — boot sırasında belirli seviyelerde olmaları gerekir, bu yüzden analog
-// sense hatları VE I2C için KULLANILMADI (bu karttaki GPIO9 doğrudan BOOT tuşu,
-// GPIO8 kartın dahili LED'ine bağlı). Bunun yerine ADC1 kanalları GPIO0/GPIO1/GPIO3,
-// I2C için de strapping olmayan GPIO4/GPIO5 seçildi (önceki denemede GPIO10/GPIO20
-// kullanılmıştı, LCD bağlıyken WiFi bağlanamaz hale geliyordu — bkz. README test
-// notu; GPIO4/5 ile tekrar test ediliyor).
+// sense hatları için KULLANILMADI (bu karttaki GPIO9 doğrudan BOOT tuşu, GPIO8
+// kartın dahili LED'ine bağlı). Bunun yerine ADC1 kanalları GPIO0/GPIO1/GPIO3 seçildi.
+//
+// NOT (9 Eylül 2026): 128x64 I2C LCD entegrasyonu denendi (GPIO4/5, sonra GPIO10/20)
+// — bir modül arızalı çıktı, ayrıca LCD bağlıyken WiFi bağlanamaz hale geliyordu
+// (güç çekişi/EMI şüphesi, bkz. README test notu). LCD'den vazgeçildi, yerine
+// aşağıdaki WebServer tabanlı HTTP durum sayfası eklendi — zaten çalışan WiFi
+// altyapısını kullandığından ek donanım/kütüphane riski taşımıyor.
 //
 // Bağlantılar:
 //   GPIO0  (ADC1_CH0) -> AC-DC şarj adaptörünün DC çıkışı (~24V), 100kohm(üst)+10kohm(alt) bölücüden sonra
@@ -37,12 +41,6 @@
 //            ORTAK ANOT'tur — bu durumda ortak bacağı GND yerine 3.3V'a bağlayın VE
 //            aşağıdaki ledOn()/ledOff() fonksiyonlarındaki HIGH/LOW değerlerini
 //            ters çevirin.
-//   GPIO4  -> 128x64 I2C LCD'nin SDA'sı
-//   GPIO5  -> 128x64 I2C LCD'nin SCL'i
-//            LCD modülünün VCC'si 3.3V'a, GND'si ortak GND'ye bağlanmalı (çoğu
-//            SSD1306 modülü 3.3-5V toleranslıdır ama ESP32-C3'ün I2C hattı 3.3V
-//            mantık seviyesindedir — modülünüz sadece 5V mantık kabul ediyorsa
-//            seviye kaydırıcı (level shifter) gerekir).
 //   USB-C            -> sadece güç ve programlama için (ayrı bir 5V kaynaktan beslenecek, BOM'a bakın)
 //
 // KALİBRASYON: ✅ 9 Eylül 2026'da yapıldı (bkz. AC_DIVIDER_RATIO/BAT_DIVIDER_RATIO
@@ -57,9 +55,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <WebServer.h>
 #include "secrets.h"
 
 const int PIN_VAC = 0;
@@ -68,13 +64,11 @@ const int PIN_VCHG = 3;
 const int PIN_LED_GREEN = 6;
 const int PIN_LED_RED = 7;
 
-const int PIN_I2C_SDA = 4;
-const int PIN_I2C_SCL = 5;
-const int LCD_WIDTH = 128;
-const int LCD_HEIGHT = 64;
-const int LCD_I2C_ADDR = 0x3C;  // çoğu 128x64 SSD1306 modülünde bu adres kullanılır; ekran açılmazsa 0x3D deneyin
-Adafruit_SSD1306 lcd(LCD_WIDTH, LCD_HEIGHT, &Wire, -1);
-bool lcdReady = false;
+// Yerel ağdaki herhangi bir tarayıcıdan (telefon dahil) http://<esp32-ip>/ ile
+// erişilen basit durum sayfası. IP adresi Wi-Fi bağlanınca seri porta basılır.
+WebServer webServer(80);
+float gVac = 0, gVbat = 0, gVchg = 0;
+int gSoc = 0;
 
 // Ortak katot varsayıldı: HIGH = LED yanar. Ortak anot ise bu ikisini ters çevirin.
 const int LED_ON = HIGH;
@@ -437,33 +431,25 @@ void notifyStateChangeIfNeeded(float vAc, float vBat, int soc) {
   }
 }
 
-// LCD'ye anlık durumu basar. LCD bağlı değilse veya init başarısız olduysa hiçbir
-// şey yapmaz (lcdReady false) — LCD arızası/eksikliği ana izleme işlevini etkilemez.
-void updateLcd(float vAc, float vBat, float vChg, int soc) {
-  if (!lcdReady) return;
-  lcd.clearDisplay();
-  lcd.setTextSize(1);
-  lcd.setTextColor(SSD1306_WHITE);
-  lcd.setCursor(0, 0);
-  lcd.print("UPS: ");
-  lcd.println(stateName(currentState));
-  lcd.setCursor(0, 16);
-  lcd.print("AC : ");
-  lcd.print(vAc, 1);
-  lcd.println("V");
-  lcd.setCursor(0, 28);
-  lcd.print("BAT: ");
-  lcd.print(vBat, 1);
-  lcd.print("V  %");
-  lcd.println(soc);
-  lcd.setCursor(0, 40);
-  lcd.print("CHG: ");
-  lcd.print(vChg, 1);
-  lcd.println("V");
-  lcd.setCursor(0, 52);
-  lcd.print("WiFi: ");
-  lcd.println(WiFi.status() == WL_CONNECTED ? "OK" : "YOK");
-  lcd.display();
+// Telefon/PC tarayıcısından http://<esp32-ip>/ ile görüntülenen basit durum sayfası.
+// 5 saniyede bir otomatik yenilenir (meta refresh) — JavaScript'e gerek yok.
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                "<meta http-equiv='refresh' content='5'>"
+                "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                "<title>UPS Durumu</title>"
+                "<style>body{font-family:sans-serif;background:#111;color:#eee;padding:20px}"
+                "h1{font-size:1.4em}.row{margin:10px 0;font-size:1.2em}"
+                ".ok{color:#4caf50}.bat{color:#ff9800}.low{color:#f44336}</style></head><body>";
+  html += "<h1>UPS Durumu: <span class='" +
+          String(currentState == STATE_AC_OK ? "ok" : (currentState == STATE_ON_BATTERY ? "bat" : "low")) +
+          "'>" + stateName(currentState) + "</span></h1>";
+  html += "<div class='row'>AC hatti: " + String(gVac, 2) + " V</div>";
+  html += "<div class='row'>Batarya: " + String(gVbat, 2) + " V (%" + String(gSoc) + ")</div>";
+  html += "<div class='row'>Sarj cikisi: " + String(gVchg, 2) + " V</div>";
+  html += "<div class='row'>Uptime: " + String(millis() / 1000) + " s</div>";
+  html += "</body></html>";
+  webServer.send(200, "text/html", html);
 }
 
 void setup() {
@@ -474,24 +460,15 @@ void setup() {
   Serial.println("UPS_MONITOR_ESP32C3_BOOT");
   analogReadResolution(12);
 
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  lcdReady = lcd.begin(SSD1306_SWITCHCAPVCC, LCD_I2C_ADDR);
-  if (lcdReady) {
-    lcd.clearDisplay();
-    lcd.setTextSize(1);
-    lcd.setTextColor(SSD1306_WHITE);
-    lcd.setCursor(0, 0);
-    lcd.println("UPS baslatiliyor...");
-    lcd.display();
-  } else {
-    Serial.println("LCD bulunamadi (0x3C) - LCD'siz devam ediliyor");
-  }
-
   connectWifi();
 
   // Boot öncesi bekleyen eski Telegram komutlarını sessizce temizle — aksi halde her
   // yeniden başlatmada eski bir "/durum" komutuna gecikmeli yanıt gider.
   syncTelegramOffset();
+
+  webServer.on("/", handleRoot);
+  webServer.begin();
+  Serial.println("HTTP durum sayfasi baslatildi (yukarida basilan IP adresine tarayicidan gidin)");
 }
 
 void loop() {
@@ -502,11 +479,15 @@ void loop() {
   float vBat = voltageFromRawMv(vBatRawMv, BAT_DIVIDER_RATIO);
   float vChg = voltageFromRawMv(vChgRawMv, CHG_DIVIDER_RATIO);
   int soc = estimateSoc(vBat);
+  gVac = vAc;
+  gVbat = vBat;
+  gVchg = vChg;
+  gSoc = soc;
 
   updateState(vAc, soc);
   updateLed();
-  updateLcd(vAc, vBat, vChg, soc);
   notifyStateChangeIfNeeded(vAc, vBat, soc);
+  webServer.handleClient();
 
   unsigned long now = millis();
   if (now - lastPollMs >= POLL_INTERVAL_MS) {
