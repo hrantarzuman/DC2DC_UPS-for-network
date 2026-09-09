@@ -190,6 +190,13 @@ enum UpsState { STATE_AC_OK, STATE_ON_BATTERY, STATE_ON_BATTERY_LOW };
 UpsState currentState = STATE_AC_OK;
 UpsState lastReportedState = STATE_AC_OK;
 
+// Arduino IDE, .ino dosyaları için fonksiyon prototiplerini otomatik olarak dosyanın
+// başına (bu enum'dan ÖNCEYE) ekler. stateName() parametresi UpsState olduğundan bu
+// otomatik prototip enum tanımlanmadan önce oluşup derleme hatası veriyordu. Burada
+// doğru prototipi elle vererek Arduino'nun kendi (hatalı) prototipini eklemesini
+// engelliyoruz.
+const char* stateName(UpsState s);
+
 bool pendingAcLost = false;
 unsigned long acLostSince = 0;
 bool pendingAcRestored = false;
