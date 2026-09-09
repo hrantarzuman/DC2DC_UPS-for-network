@@ -94,7 +94,7 @@ float BAT_DIVIDER_RATIO = 5.08427;
 // başlangıç değeri olarak BAT_DIVIDER_RATIO kopyalandı — ama farklı bir fiziksel
 // düğüm (şarj devresinin diyottan önceki çıkışı) olduğundan AYRI kalibre edilmeli:
 // VCHG_RAW_MV'yi serial monitörden okuyup gerçek multimetre değeriyle karşılaştırın.
-float CHG_DIVIDER_RATIO = 5.08427;
+float CHG_DIVIDER_RATIO = 5.16623;
 
 // Mains kaybı algılama eşiği: adaptör ~24V, ~10V altına düşerse "kayıp" kabul edilir
 const float AC_LOST_THRESHOLD_V = 10.0;
