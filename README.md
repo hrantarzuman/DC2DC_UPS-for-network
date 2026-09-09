@@ -169,6 +169,17 @@ kaçınıldı.
   muhtemelen gerçekten SSD1306). Kod/kablo/besleme tarafında sorun bulunamadığından modülün
   arızalı olduğu (örn. panel-sürücü flex bağlantısı kopuk) düşünülüyor — başka bir LCD ile
   doğrulanacak, LCD entegrasyonu bu doğrulanana kadar donduruldu.
+  **ÖNEMLİ EK BULGU:** aynı test sürecinde ESP32-C3 WiFi'ye hiçbir ağa (ev ağı, misafir ağı,
+  telefon hotspot'u dahil) bağlanamaz hale geldi — tarama (scan) çalışıyordu ama bağlanma
+  (association) sürekli başarısız oluyordu (`WL_DISCONNECTED`). Tam flash silme, kablo/port
+  değişikliği, güç kaynağı izolasyonu denendi, hiçbiri çözmedi. **LCD'yi fiziksel olarak söküp
+  çıkarınca WiFi anında normal bağlandı.** Muhtemel sebep: LCD'nin (özellikle OLED boost/charge-
+  pump devresinin) ek akım çekişi, WiFi bağlanma anındaki kısa yüksek-akım darbelerinde zaten
+  sınırda olan 3.3V regülatörünü çökertiyor OLABİLİR; ayrıca OLED'in anahtarlamalı yükseltici
+  devresinin ürettiği EMI, yakın duran 2.4GHz antenini etkiliyor OLABİLİR. **Sonraki LCD
+  denemesinde:** LCD'nin VCC/GND hattına yakın bir kapasitör (100-470µF elektrolitik + 0.1µF
+  seramik) eklenmeli ve LCD, ESP32'nin anten bölgesinden (USB konnektörüne yakın köşe) fiziksel
+  olarak uzak tutulmalı — bu olmadan LCD bağlıyken WiFi/Telegram işlevi çalışmayabilir.
 - **Bug fix (9 Eylül 2026):** `notifyStateChangeIfNeeded()` önceden Telegram gönderimi başarısız
   olsa bile durumu "bildirildi" işaretliyordu — geçici bir ağ/TLS hatası kritik bir "elektrik
   kesildi" bildirimini sessizce kaybedebiliyordu. Artık başarısız gönderim `NOTIFY_RETRY_MS`
