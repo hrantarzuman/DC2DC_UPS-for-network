@@ -62,6 +62,15 @@
 Firmware güç yolunu kesmediği için (bilinçli tasarım), çok uzun bir kesintide akü ~11.5V altına inip
 zarar görebilir — Telegram'daki "DUSUK BATARYA" uyarısı geldiğinde manuel müdahale gerekebilir.
 
+**Test notu — ESP32-C3'ün QCmini hattı başka hiçbir yük için kullanılmamalı:** 9 Eylül 2026'da
+powerbank'larla yapılan yük testinde, test yüklerinden biri yanlışlıkla ESP32-C3'ün kendi QCmini'sine
+bağlandı. Bu hat bilerek izole tutulmuştu (bkz. BOM #6 kararı); üzerine ek yük binince ESP32-C3'ün
+5V girişi sarktı, kartın kendi 3.3V/ADC referansı da bundan etkilenip ölçümlere gerçek akü voltajından
+bağımsız bir gürültü/hata kattı (ESP32 resetlenmedi, Wi-Fi kopmadı — brown-out değildi, ama temiz veri
+için ideal değildi). **Kural: ESP32-C3'ün QCmini'sine sadece ESP32-C3 bağlanır, test yükleri dahil
+başka hiçbir şey bu hatta paylaştırılmaz.** Test yükleri (powerbank vb.) sadece Pi'nin QCmini'sine ya
+da tamamen ayrı bir düzenekle bağlanmalı.
+
 ## Güç Bütçesi
 
 | Değer | Miktar |
