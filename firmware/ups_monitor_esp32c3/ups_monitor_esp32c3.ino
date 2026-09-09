@@ -72,19 +72,24 @@ float BAT_DIVIDER_RATIO = 5.07;
 const float AC_LOST_THRESHOLD_V = 10.0;
 const unsigned long DEBOUNCE_MS = 2000;
 
-// 12V kurşun asit (VRLA) akü için kaba voltaj->SOC tablosu. Not: mains varken bu düğüm
-// şarj modülü tarafından 13.6-13.8V'a sabitlendiği için SOC okuması sadece ON_BATTERY
-// durumundayken (mains koptuğunda) anlamlıdır. Akünün dahili BMS'i olmadığından
-// SOC_LOW_THRESHOLD, LiFePO4'e göre daha erken (daha yüksek) tutuldu — derin deşarj
-// (11.5V altı) akünün ömrünü kalıcı olarak kısaltır.
+// 12V kurşun asit (Power-Xtra PX26-12B, resmi datasheet 9 Eylül 2026) için kaba
+// voltaj->SOC tablosu. ÖNEMLİ SINIRLAMA: üretici açık-devre voltaj->SOC tablosu
+// yayınlamıyor (kurşun asitte bu değer yüke/sıcaklığa çok bağımlı olduğundan yaygın
+// değildir). 0% ucu datasheet'in RESMİ 20 saatlik deşarj bitiş voltajından (10.50V)
+// alındı, 100% ucu endüstri standardı tam-dolu dinlenme voltajı (~12.7V). Ayrıca:
+// mains kesildiğinde akü voltajı birkaç dakika boyunca gerçekte olduğundan DAHA
+// DÜŞÜK görünebilir ("surface charge" / yüzey şarjının hızla dağılması) — bu
+// gerçek kapasite kaybı değildir, kendi kendine düzelir. Bu yüzden ON_BATTERY_LOW
+// geçişi ayrıca LOW_BATTERY_DEBOUNCE_MS ile sürekliliği doğrulanır (aşağıya bakın),
+// tek bir anlık düşük okumayla alarm tetiklenmez.
 struct SocPoint { float voltage; int soc; };
 const SocPoint SOC_TABLE[] = {
-  {12.70, 100}, {12.50, 90}, {12.40, 75}, {12.30, 60},
-  {12.20, 50},  {12.10, 35}, {12.00, 25}, {11.90, 15},
-  {11.80, 5},   {11.50, 0}
+  {12.70, 100}, {12.40, 85}, {12.20, 65}, {12.00, 45},
+  {11.80, 30},  {11.60, 18}, {11.40, 10}, {10.50, 0}
 };
 const int SOC_TABLE_SIZE = sizeof(SOC_TABLE) / sizeof(SOC_TABLE[0]);
-const int SOC_LOW_THRESHOLD = 25;
+const int SOC_LOW_THRESHOLD = 25;  // ~11.7V civarına denk gelir, 10.50V gerçek tabana iyi bir marj bırakır
+const unsigned long LOW_BATTERY_DEBOUNCE_MS = 60000;  // düşük SOC 1 dakika sürmeden LOW'a geçilmez
 
 enum UpsState { STATE_AC_OK, STATE_ON_BATTERY, STATE_ON_BATTERY_LOW };
 UpsState currentState = STATE_AC_OK;
@@ -94,6 +99,11 @@ bool pendingAcLost = false;
 unsigned long acLostSince = 0;
 bool pendingAcRestored = false;
 unsigned long acRestoredSince = 0;
+
+bool pendingLow = false;
+unsigned long lowSince = 0;
+bool pendingRecovered = false;
+unsigned long recoveredSince = 0;
 
 unsigned long lastReportMs = 0;
 const unsigned long REPORT_INTERVAL_MS = 5000;
@@ -154,12 +164,36 @@ void updateState(float vAc, int soc) {
   if (!acPresent) {
     if (!pendingAcLost) { pendingAcLost = true; acLostSince = now; }
     pendingAcRestored = false;
+
     if (now - acLostSince >= DEBOUNCE_MS) {
-      currentState = (soc <= SOC_LOW_THRESHOLD) ? STATE_ON_BATTERY_LOW : STATE_ON_BATTERY;
+      // Pil moduna geçildi (veya zaten pil modundayız). ON_BATTERY_LOW'a geçiş
+      // ayrıca kendi debounce'ından geçer — mains kesilir kesilmez akünün
+      // "surface charge"ı hızla dağıldığı için voltaj birkaç dakika gerçekte
+      // olduğundan düşük görünebilir; bu tek başına alarm tetiklememeli.
+      bool lowNow = (soc <= SOC_LOW_THRESHOLD);
+      if (lowNow) {
+        if (!pendingLow) { pendingLow = true; lowSince = now; }
+        pendingRecovered = false;
+        if (now - lowSince >= LOW_BATTERY_DEBOUNCE_MS) {
+          currentState = STATE_ON_BATTERY_LOW;
+        } else if (currentState != STATE_ON_BATTERY_LOW) {
+          currentState = STATE_ON_BATTERY;
+        }
+      } else {
+        if (!pendingRecovered) { pendingRecovered = true; recoveredSince = now; }
+        pendingLow = false;
+        if (currentState == STATE_ON_BATTERY_LOW) {
+          if (now - recoveredSince >= LOW_BATTERY_DEBOUNCE_MS) currentState = STATE_ON_BATTERY;
+        } else {
+          currentState = STATE_ON_BATTERY;
+        }
+      }
     }
   } else {
     if (!pendingAcRestored) { pendingAcRestored = true; acRestoredSince = now; }
     pendingAcLost = false;
+    pendingLow = false;
+    pendingRecovered = false;
     if (now - acRestoredSince >= DEBOUNCE_MS) {
       currentState = STATE_AC_OK;
     }
