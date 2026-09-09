@@ -20,7 +20,9 @@
 // pinleridir — boot sırasında belirli seviyelerde olmaları gerekir, bu yüzden analog
 // sense hatları VE I2C için KULLANILMADI (bu karttaki GPIO9 doğrudan BOOT tuşu,
 // GPIO8 kartın dahili LED'ine bağlı). Bunun yerine ADC1 kanalları GPIO0/GPIO1/GPIO3,
-// I2C için de strapping olmayan GPIO10/GPIO20 seçildi.
+// I2C için de strapping olmayan GPIO4/GPIO5 seçildi (önceki denemede GPIO10/GPIO20
+// kullanılmıştı, LCD bağlıyken WiFi bağlanamaz hale geliyordu — bkz. README test
+// notu; GPIO4/5 ile tekrar test ediliyor).
 //
 // Bağlantılar:
 //   GPIO0  (ADC1_CH0) -> AC-DC şarj adaptörünün DC çıkışı (~24V), 100kohm(üst)+10kohm(alt) bölücüden sonra
@@ -35,8 +37,8 @@
 //            ORTAK ANOT'tur — bu durumda ortak bacağı GND yerine 3.3V'a bağlayın VE
 //            aşağıdaki ledOn()/ledOff() fonksiyonlarındaki HIGH/LOW değerlerini
 //            ters çevirin.
-//   GPIO10 -> 128x64 I2C LCD'nin SDA'sı
-//   GPIO20 -> 128x64 I2C LCD'nin SCL'i
+//   GPIO4  -> 128x64 I2C LCD'nin SDA'sı
+//   GPIO5  -> 128x64 I2C LCD'nin SCL'i
 //            LCD modülünün VCC'si 3.3V'a, GND'si ortak GND'ye bağlanmalı (çoğu
 //            SSD1306 modülü 3.3-5V toleranslıdır ama ESP32-C3'ün I2C hattı 3.3V
 //            mantık seviyesindedir — modülünüz sadece 5V mantık kabul ediyorsa
@@ -66,8 +68,8 @@ const int PIN_VCHG = 3;
 const int PIN_LED_GREEN = 6;
 const int PIN_LED_RED = 7;
 
-const int PIN_I2C_SDA = 10;
-const int PIN_I2C_SCL = 20;
+const int PIN_I2C_SDA = 4;
+const int PIN_I2C_SCL = 5;
 const int LCD_WIDTH = 128;
 const int LCD_HEIGHT = 64;
 const int LCD_I2C_ADDR = 0x3C;  // çoğu 128x64 SSD1306 modülünde bu adres kullanılır; ekran açılmazsa 0x3D deneyin
