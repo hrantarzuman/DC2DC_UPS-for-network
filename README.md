@@ -143,9 +143,16 @@ kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
 - **Güç yolunu kontrol etmez**, sadece izler; durum değişikliklerinde (mains kaybı/dönüşü, düşük batarya)
   **doğrudan Wi-Fi üzerinden Telegram'a** bildirim gönderir — Pi'ye bağımlı değil.
 - **Telegram'dan sorgulanabilir:** bota `/durum` yazınca anlık AC hattı/batarya voltajı ve yüzdesini
-  içeren bir yanıt döner (`getUpdates` ile kütüphanesiz polling, her 4 saniyede bir kontrol edilir).
-  `/start` da kısa bir kullanım notu döner. Boot anında bekleyen eski komutlar sessizce temizlenir
-  (yeniden başlatmada gecikmeli yanıt gitmesin diye).
+  (aktif bir kesinti varsa başlangıç tarihi/saati ve HH:MM:SS formatında süresiyle) içeren bir yanıt
+  döner. `/gecmis` son ~30 kesintinin listesini (tarih/saat + süre) döner. `getUpdates` ile
+  kütüphanesiz polling, her 4 saniyede bir kontrol edilir. `/start` kısa bir kullanım notu döner.
+  Boot anında bekleyen eski komutlar sessizce temizlenir (yeniden başlatmada gecikmeli yanıt
+  gitmesin diye).
+- **Kesinti sayacı ve geçmişi:** kesinti başladığında NTP'den (WiFi üzerinden, `configTime`) alınan
+  gerçek takvim zamanı kaydedilir. Aktif kesinti süresi hem Telegram `/durum`'da hem HTTP durum
+  sayfasında HH:MM:SS olarak gösterilir; elektrik gelince "elektrik geldi" bildirimine de o
+  kesintinin toplam süresi eklenir. Son ~30 kesinti RAM'de (ESP32 resetlenene kadar kalıcı, ihmal
+  edilebilir yer kaplar) tutulur, `/gecmis` komutu ve HTTP sayfasından görülebilir.
 - Ayrıca USB-seri üzerinden (115200 baud) durum satırı basar (`STATE=...;VAC=...;VBAT=...;SOC=...;WIFI=...`) — debug için.
 - **Kurulum öncesi zorunlu adım:** `secrets.h.example` dosyasını aynı klasörde `secrets.h` olarak
   kopyalayın, kendi Wi-Fi ve Telegram bot bilgilerinizi girin. `secrets.h` `.gitignore`'da — **asla

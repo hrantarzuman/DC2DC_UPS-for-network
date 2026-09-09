@@ -9,6 +9,9 @@
 // ve Telegram'dan gelen "/durum" komutuna anlık AC/batarya durumuyla cevap vermek.
 // Ayrıca yerel ağdaki herhangi bir cihazdan (telefon dahil) http://<esp32-ip>/
 // adresiyle görüntülenebilen basit bir durum sayfası sunar (bkz. WebServer).
+// Kesinti başladığında NTP ile alınan gerçek takvim zamanı (bkz. GMT_OFFSET_SEC)
+// kaydedilir; hem aktif kesintinin süresi/başlangıç saati hem de RAM'de tutulan
+// son ~30 kesintinin geçmişi (/gecmis komutu, HTTP sayfası) buradan gelir.
 //
 // GEREKLİ KÜTÜPHANE: yok — sadece ESP32 Arduino core (WiFi.h, HTTPClient.h,
 // WiFiClientSecure.h, WebServer.h dahili gelir). Arduino IDE'de board olarak
@@ -56,7 +59,16 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <WebServer.h>
+#include <time.h>
 #include "secrets.h"
+
+// Kesinti başlangıç saatini/tarihini gerçek takvim zamanı olarak gösterebilmek için
+// NTP ile zaman senkronize edilir (ESP32'nin pilli RTC'si yok, WiFi bağlanınca
+// internetten çekilir). Türkiye UTC+3, DST (yaz saati) uygulamıyor.
+const long GMT_OFFSET_SEC = 3 * 3600;
+const int DAYLIGHT_OFFSET_SEC = 0;
+const char* NTP_SERVER1 = "pool.ntp.org";
+const char* NTP_SERVER2 = "time.google.com";
 
 const int PIN_VAC = 0;
 const int PIN_VBAT = 1;
@@ -114,6 +126,65 @@ const SocPoint SOC_TABLE[] = {
 const int SOC_TABLE_SIZE = sizeof(SOC_TABLE) / sizeof(SOC_TABLE[0]);
 const int SOC_LOW_THRESHOLD = 25;  // ~11.7V civarına denk gelir, 10.50V gerçek tabana iyi bir marj bırakır
 const unsigned long LOW_BATTERY_DEBOUNCE_MS = 60000;  // düşük SOC 1 dakika sürmeden LOW'a geçilmez
+
+// Aktif kesinti takibi: outageStartMillis == 0 iken kesinti yok demektir. Kesinti
+// başladığında (updateState içinde) her ikisi de set edilir, elektrik gelince sıfırlanır.
+unsigned long outageStartMillis = 0;
+time_t outageStartEpoch = 0;
+
+// Son kesintilerin küçük bir geçmişi — RAM'de tutulur (ESP32 resetlenirse kaybolur,
+// ama UPS'in kendisi kesinti sırasında hiç kapanmadığı için pratikte kaybolmaz).
+// Her kayıt ~12 bayt, 30 kayıt ~360 bayt — göz ardı edilebilir bir yer kaplar.
+struct OutageRecord { time_t startEpoch; unsigned long durationSec; };
+const int OUTAGE_LOG_SIZE = 30;
+OutageRecord outageLog[OUTAGE_LOG_SIZE];
+int outageLogCount = 0;  // dolu kayıt sayısı (OUTAGE_LOG_SIZE'da sabitlenir)
+int outageLogNext = 0;   // bir sonraki yazılacak (dairesel) index
+
+void logOutage(time_t startEpoch, unsigned long durationSec) {
+  outageLog[outageLogNext] = {startEpoch, durationSec};
+  outageLogNext = (outageLogNext + 1) % OUTAGE_LOG_SIZE;
+  if (outageLogCount < OUTAGE_LOG_SIZE) outageLogCount++;
+}
+
+// Gercek zaman NTP ile senkronize olmadan once time() kucuk/anlamsiz bir deger doner.
+bool timeIsSynced() {
+  return time(nullptr) > 1700000000;  // yaklasik 2023'ten sonraysa senkronize kabul edilir
+}
+
+String formatDuration(unsigned long totalMs) {
+  unsigned long totalSec = totalMs / 1000;
+  unsigned long h = totalSec / 3600;
+  unsigned long m = (totalSec % 3600) / 60;
+  unsigned long s = totalSec % 60;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%02lu:%02lu:%02lu", h, m, s);
+  return String(buf);
+}
+
+String formatEpoch(time_t t) {
+  if (t < 1700000000) return "bilinmiyor (zaman senkronize degil)";
+  struct tm timeinfo;
+  localtime_r(&t, &timeinfo);
+  char buf[32];
+  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M:%S", &timeinfo);
+  return String(buf);
+}
+
+// En yeniden eskiye, en fazla 10 kesinti kaydını okunabilir bir mesaja çevirir.
+String buildOutageLogMessage() {
+  if (outageLogCount == 0) return "Henuz kayitli kesinti yok.";
+  String msg = "Son kesintiler (en yeniden eskiye):\n";
+  int shown = 0;
+  const int maxShow = 10;
+  for (int i = 0; i < outageLogCount && shown < maxShow; i++) {
+    int idx = (outageLogNext - 1 - i + OUTAGE_LOG_SIZE) % OUTAGE_LOG_SIZE;
+    msg += formatEpoch(outageLog[idx].startEpoch) + " - sure: " +
+           formatDuration(outageLog[idx].durationSec * 1000UL) + "\n";
+    shown++;
+  }
+  return msg;
+}
 
 enum UpsState { STATE_AC_OK, STATE_ON_BATTERY, STATE_ON_BATTERY_LOW };
 UpsState currentState = STATE_AC_OK;
@@ -190,6 +261,13 @@ void updateState(float vAc, int soc) {
     pendingAcRestored = false;
 
     if (now - acLostSince >= DEBOUNCE_MS) {
+      // Kesinti ilk kez onaylandı: gerçek başlangıç anı acLostSince (debounce'tan
+      // ÖNCEki an) olduğundan, geriye doğru hesaplayıp o anın takvim zamanını buluyoruz.
+      if (outageStartMillis == 0) {
+        outageStartMillis = acLostSince;
+        outageStartEpoch = time(nullptr) - (long)((now - acLostSince) / 1000);
+      }
+
       // Pil moduna geçildi (veya zaten pil modundayız). ON_BATTERY_LOW'a geçiş
       // ayrıca kendi debounce'ından geçer — mains kesilir kesilmez akünün
       // "surface charge"ı hızla dağıldığı için voltaj birkaç dakika gerçekte
@@ -219,6 +297,11 @@ void updateState(float vAc, int soc) {
     pendingLow = false;
     pendingRecovered = false;
     if (now - acRestoredSince >= DEBOUNCE_MS) {
+      if (currentState != STATE_AC_OK && outageStartMillis != 0) {
+        unsigned long durationSec = (now - outageStartMillis) / 1000;
+        logOutage(outageStartEpoch, durationSec);
+        outageStartMillis = 0;
+      }
       currentState = STATE_AC_OK;
     }
   }
@@ -368,9 +451,17 @@ void checkTelegramCommands(float vAc, float vBat, int soc) {
                  String("Durum: ") + stateName(currentState) + "\n" +
                  "AC hatti: " + String(vAc, 2) + "V\n" +
                  "Batarya: " + String(vBat, 2) + "V (%" + String(soc) + ")";
+    if (outageStartMillis != 0) {
+      msg += "\nKesinti baslangici: " + formatEpoch(outageStartEpoch) +
+             "\nKesinti suresi: " + formatDuration(millis() - outageStartMillis);
+    }
     sendTelegramMessage(msg);
+  } else if (text == "/gecmis" || text == "/log") {
+    sendTelegramMessage(buildOutageLogMessage());
   } else if (text == "/start") {
-    sendTelegramMessage("UPS izleme botu aktif. Komutlar:\n/durum - anlik AC ve batarya durumu");
+    sendTelegramMessage("UPS izleme botu aktif. Komutlar:\n"
+                         "/durum - anlik AC/batarya durumu (kesinti varsa suresiyle)\n"
+                         "/gecmis - son kesintilerin listesi");
   }
 }
 
@@ -413,16 +504,25 @@ void notifyStateChangeIfNeeded(float vAc, float vBat, int soc) {
 
   String msg;
   switch (currentState) {
-    case STATE_AC_OK:
+    case STATE_AC_OK: {
       msg = "UPS: Elektrik geldi, mains'e donuldu. Batarya: " + String(soc) + "%";
+      if (outageLogCount > 0) {
+        int idx = (outageLogNext - 1 + OUTAGE_LOG_SIZE) % OUTAGE_LOG_SIZE;
+        msg += "\nKesinti baslangici: " + formatEpoch(outageLog[idx].startEpoch) +
+               "\nKesinti suresi: " + formatDuration(outageLog[idx].durationSec * 1000UL);
+      }
       break;
+    }
     case STATE_ON_BATTERY:
       msg = "UPS: ELEKTRIK KESILDI! Batarya ile calisiyor. Batarya: " + String(soc) +
-            "% (" + String(vBat, 2) + "V)";
+            "% (" + String(vBat, 2) + "V)" +
+            "\nKesinti baslangici: " + formatEpoch(outageStartEpoch);
       break;
     case STATE_ON_BATTERY_LOW:
       msg = "UPS: DUSUK BATARYA UYARISI! Kesinti devam ediyor, batarya: " + String(soc) +
-            "% (" + String(vBat, 2) + "V) - kalan sure kisitli olabilir.";
+            "% (" + String(vBat, 2) + "V) - kalan sure kisitli olabilir." +
+            "\nKesinti baslangici: " + formatEpoch(outageStartEpoch) +
+            "\nKesinti suresi: " + formatDuration(millis() - outageStartMillis);
       break;
   }
   if (sendTelegramMessage(msg)) {
@@ -447,7 +547,13 @@ void handleRoot() {
   html += "<div class='row'>AC hatti: " + String(gVac, 2) + " V</div>";
   html += "<div class='row'>Batarya: " + String(gVbat, 2) + " V (%" + String(gSoc) + ")</div>";
   html += "<div class='row'>Sarj cikisi: " + String(gVchg, 2) + " V</div>";
+  if (outageStartMillis != 0) {
+    html += "<div class='row'>Kesinti baslangici: " + formatEpoch(outageStartEpoch) + "</div>";
+    html += "<div class='row'>Kesinti suresi: " + formatDuration(millis() - outageStartMillis) + "</div>";
+  }
   html += "<div class='row'>Uptime: " + String(millis() / 1000) + " s</div>";
+  html += "<h2>Son kesintiler</h2><div class='row' style='white-space:pre-line'>" +
+          buildOutageLogMessage() + "</div>";
   html += "</body></html>";
   webServer.send(200, "text/html", html);
 }
@@ -461,6 +567,7 @@ void setup() {
   analogReadResolution(12);
 
   connectWifi();
+  configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER1, NTP_SERVER2);
 
   // Boot öncesi bekleyen eski Telegram komutlarını sessizce temizle — aksi halde her
   // yeniden başlatmada eski bir "/durum" komutuna gecikmeli yanıt gider.
