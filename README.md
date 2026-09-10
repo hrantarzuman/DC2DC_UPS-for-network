@@ -20,6 +20,10 @@
 <td><img src="images/http-sayfasi-ac-ok.png" width="260" alt="HTTP durum sayfası, AC_OK durumu"><br><sub>HTTP durum sayfası — AC_OK</sub></td>
 <td><img src="images/http-sayfasi-on-battery.png" width="260" alt="HTTP durum sayfası, ON_BATTERY durumu"><br><sub>HTTP durum sayfası — ON_BATTERY (kesinti sayacı görünüyor)</sub></td>
 </tr>
+<tr>
+<td><img src="images/http-sayfasi-kalibrasyon.png" width="260" alt="Web üzerinden kalibrasyon sayfası"><br><sub>Web üzerinden kalibrasyon sayfası — flaş atmadan oran ayarı</sub></td>
+<td><img src="images/arduino-ide-ota-port.png" width="260" alt="Arduino IDE'de OTA ağ portu"><br><sub>Arduino IDE — WiFi üzerinden (OTA) görünen ağ portu</sub></td>
+</tr>
 </table>
 
 <img src="images/telegram-bot-ornegi.png" width="320" alt="Telegram botu örnek konuşma">
