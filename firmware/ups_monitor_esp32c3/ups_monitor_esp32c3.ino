@@ -158,19 +158,35 @@ const unsigned long LOW_BATTERY_DEBOUNCE_MS = 60000;  // düşük SOC 1 dakika s
 unsigned long outageStartMillis = 0;
 time_t outageStartEpoch = 0;
 
-// Son kesintilerin küçük bir geçmişi — RAM'de tutulur (ESP32 resetlenirse kaybolur,
-// ama UPS'in kendisi kesinti sırasında hiç kapanmadığı için pratikte kaybolmaz).
-// Her kayıt ~12 bayt, 30 kayıt ~360 bayt — göz ardı edilebilir bir yer kaplar.
+// Son kesintilerin küçük bir geçmişi. NVS'ye (kalıcı hafıza) yazılır — ESP32 resetlense
+// (OTA güncelleme, WiFi sorunu vb.) veya besleme kesilse bile kaybolmaz. Her kayıt ~16
+// bayt, 30 kayıt ~480 bayt — göz ardı edilebilir bir yer kaplar. Kesinti sıklığında (günde
+// birkaç kez, çok testte biraz daha fazla) NVS yazma ömrü açısından hiç sorun teşkil etmez.
 struct OutageRecord { time_t startEpoch; unsigned long durationSec; };
 const int OUTAGE_LOG_SIZE = 30;
 OutageRecord outageLog[OUTAGE_LOG_SIZE];
 int outageLogCount = 0;  // dolu kayıt sayısı (OUTAGE_LOG_SIZE'da sabitlenir)
 int outageLogNext = 0;   // bir sonraki yazılacak (dairesel) index
 
+void saveOutageLogToNvs() {
+  calibPrefs.putBytes("outLog", outageLog, sizeof(outageLog));
+  calibPrefs.putInt("outLogCount", outageLogCount);
+  calibPrefs.putInt("outLogNext", outageLogNext);
+}
+
+void loadOutageLogFromNvs() {
+  if (calibPrefs.getBytesLength("outLog") == sizeof(outageLog)) {
+    calibPrefs.getBytes("outLog", outageLog, sizeof(outageLog));
+    outageLogCount = calibPrefs.getInt("outLogCount", 0);
+    outageLogNext = calibPrefs.getInt("outLogNext", 0);
+  }
+}
+
 void logOutage(time_t startEpoch, unsigned long durationSec) {
   outageLog[outageLogNext] = {startEpoch, durationSec};
   outageLogNext = (outageLogNext + 1) % OUTAGE_LOG_SIZE;
   if (outageLogCount < OUTAGE_LOG_SIZE) outageLogCount++;
+  saveOutageLogToNvs();
 }
 
 // Gercek zaman NTP ile senkronize olmadan once time() kucuk/anlamsiz bir deger doner.
@@ -667,6 +683,7 @@ void setup() {
   AC_DIVIDER_RATIO = calibPrefs.getFloat("ac_ratio", AC_DIVIDER_RATIO);
   BAT_DIVIDER_RATIO = calibPrefs.getFloat("bat_ratio", BAT_DIVIDER_RATIO);
   CHG_DIVIDER_RATIO = calibPrefs.getFloat("chg_ratio", CHG_DIVIDER_RATIO);
+  loadOutageLogFromNvs();
 
   connectWifi();
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER1, NTP_SERVER2);

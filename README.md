@@ -171,8 +171,9 @@ kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
 - **Kesinti sayacı ve geçmişi:** kesinti başladığında NTP'den (WiFi üzerinden, `configTime`) alınan
   gerçek takvim zamanı kaydedilir. Aktif kesinti süresi hem Telegram `/durum`'da hem HTTP durum
   sayfasında HH:MM:SS olarak gösterilir; elektrik gelince "elektrik geldi" bildirimine de o
-  kesintinin toplam süresi eklenir. Son ~30 kesinti RAM'de (ESP32 resetlenene kadar kalıcı, ihmal
-  edilebilir yer kaplar) tutulur, `/gecmis` komutu ve HTTP sayfasından görülebilir.
+  kesintinin toplam süresi eklenir. Son ~30 kesinti **NVS'ye (kalıcı hafıza) yazılır** (9 Eylül
+  2026'da RAM-only'den değiştirildi — OTA güncelleme/reset ile kayboluyordu), `/gecmis` komutu ve
+  HTTP sayfasından görülebilir.
 - Ayrıca USB-seri üzerinden (115200 baud) durum satırı basar (`STATE=...;VAC=...;VBAT=...;SOC=...;WIFI=...`) — debug için.
 - **Kurulum öncesi zorunlu adım:** `secrets.h.example` dosyasını aynı klasörde `secrets.h` olarak
   kopyalayın, kendi Wi-Fi, Telegram bot ve OTA bilgilerinizi girin. `secrets.h` `.gitignore`'da —
