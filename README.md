@@ -171,8 +171,13 @@ kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
   edilebilir yer kaplar) tutulur, `/gecmis` komutu ve HTTP sayfasından görülebilir.
 - Ayrıca USB-seri üzerinden (115200 baud) durum satırı basar (`STATE=...;VAC=...;VBAT=...;SOC=...;WIFI=...`) — debug için.
 - **Kurulum öncesi zorunlu adım:** `secrets.h.example` dosyasını aynı klasörde `secrets.h` olarak
-  kopyalayın, kendi Wi-Fi ve Telegram bot bilgilerinizi girin. `secrets.h` `.gitignore`'da — **asla
-  GitHub'a gitmez**, sırlarınız güvende kalır.
+  kopyalayın, kendi Wi-Fi, Telegram bot ve OTA bilgilerinizi girin. `secrets.h` `.gitignore`'da —
+  **asla GitHub'a gitmez**, sırlarınız güvende kalır.
+- **OTA (kablosuz) güncelleme (9 Eylül 2026):** kart WiFi'ye bağlandıktan sonra Arduino IDE'de
+  Tools > Port altında **"UPS_ESP32C3 at \<ip\>"** olarak görünür — USB kablosuna gerek kalmadan
+  oradan yeni firmware yüklenebilir, `secrets.h`'deki `OTA_PASSWORD` ile korunur. **İlk kurulum
+  yine de USB ile yapılmalı** (OTA desteği içermeyen eski bir firmware varsa kartta, o zaman OTA
+  görünmez) — bu firmware kart üzerinde olduktan sonra artık USB'ye ihtiyaç kalmıyor.
 - **Kurulumdan sonra MUTLAKA** `AC_DIVIDER_RATIO`, `BAT_DIVIDER_RATIO` ve `CHG_DIVIDER_RATIO`
   sabitlerini multimetre ile kalibre edin — ESP32'nin ADC'si AVR'ye göre daha az doğrusal
   olduğundan bu adım burada daha da önemli. `CHG_DIVIDER_RATIO`, `BAT_DIVIDER_RATIO` ile aynı

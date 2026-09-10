@@ -14,8 +14,15 @@
 // son ~30 kesintinin geçmişi (/gecmis komutu, HTTP sayfası) buradan gelir.
 //
 // GEREKLİ KÜTÜPHANE: yok — sadece ESP32 Arduino core (WiFi.h, HTTPClient.h,
-// WiFiClientSecure.h, WebServer.h dahili gelir). Arduino IDE'de board olarak
-// "ESP32C3 Dev Module" (Boards Manager: "esp32" by Espressif Systems) seçin.
+// WiFiClientSecure.h, WebServer.h, Preferences.h, ArduinoOTA.h dahili gelir). Arduino
+// IDE'de board olarak "ESP32C3 Dev Module" (Boards Manager: "esp32" by Espressif
+// Systems) seçin.
+//
+// OTA (KABLOSUZ) GÜNCELLEME: kart WiFi'ye bağlandıktan sonra Arduino IDE'de
+// Tools > Port altında "UPS_ESP32C3 at <ip>" adıyla görünür — USB'ye gerek kalmadan
+// oradan yeni firmware yüklenebilir. secrets.h'deki OTA_PASSWORD ile korumalıdır.
+// İLK kurulum yine de USB ile yapılmalı (bu OTA desteğini içeren firmware kartta
+// olana kadar OTA çalışmaz) — bundan sonraki tüm güncellemeler OTA ile yapılabilir.
 //
 // SIR YÖNETİMİ: secrets.h.example dosyasını "secrets.h" olarak kopyalayıp kendi
 // Wi-Fi/Telegram bilgilerinizi girin. secrets.h .gitignore'da — asla GitHub'a gitmez.
@@ -64,8 +71,14 @@
 #include <HTTPClient.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include <ArduinoOTA.h>
 #include <time.h>
 #include "secrets.h"
+
+// WiFi üzerinden (OTA) firmware güncellemesi: Arduino IDE'de Tools > Port altında
+// "UPS_ESP32C3 at <ip>" olarak görünür, USB'ye gerek kalmadan oradan yükleme yapılabilir.
+// Şifre secrets.h'deki OTA_PASSWORD'den gelir.
+const char* OTA_HOSTNAME = "UPS_ESP32C3";
 
 // Kalibrasyon oranları (AC/BAT/CHG_DIVIDER_RATIO) artık http://<esp32-ip>/kalibrasyon
 // sayfasından, yeniden flaş atmaya gerek kalmadan ayarlanabiliyor — girilen değer
@@ -667,9 +680,22 @@ void setup() {
   webServer.on("/kalibrasyon/kaydet", HTTP_POST, handleCalibrationSave);
   webServer.begin();
   Serial.println("HTTP durum sayfasi baslatildi (yukarida basilan IP adresine tarayicidan gidin)");
+
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.onStart([]() { Serial.println("OTA guncelleme basladi"); });
+  ArduinoOTA.onEnd([]() { Serial.println("OTA guncelleme tamamlandi, yeniden baslatiliyor"); });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.print("OTA hata, kod: ");
+    Serial.println(error);
+  });
+  ArduinoOTA.begin();
+  Serial.println("OTA hazir - Arduino IDE > Tools > Port altinda 'UPS_ESP32C3 at <ip>' gorunmeli");
 }
 
 void loop() {
+  ArduinoOTA.handle();
+
   float vAcRawMv = readRawMv(PIN_VAC);
   float vBatRawMv = readRawMv(PIN_VBAT);
   float vChgRawMv = readRawMv(PIN_VCHG);
