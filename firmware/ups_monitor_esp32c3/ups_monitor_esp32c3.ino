@@ -48,6 +48,10 @@
 //
 // KALİBRASYON: ✅ 9 Eylül 2026'da yapıldı (bkz. AC_DIVIDER_RATIO/BAT_DIVIDER_RATIO
 // tanımlarındaki not). Farklı bir kart/direnç seti kullanırsanız tekrarlayın:
+//   EN KOLAY YOL: http://<esp32-ip>/kalibrasyon sayfasından — multimetre ile gerçek
+//   voltajı ölçüp girin, oran otomatik hesaplanıp NVS'ye (kalıcı hafıza) yazılır,
+//   yeniden flaş atmaya gerek YOK.
+//   Alternatif (seri port ile, ilk kurulumda kod içi varsayılanı değiştirmek isterseniz):
 //   1. Multimetre ile AC-DC adaptörün gerçek çıkış voltajını ölçün.
 //   2. Seri port monitöründe (115200 baud) basılan "VAC_RAW_MV" değerini okuyun.
 //   3. AC_DIVIDER_RATIO'yu gerçek_voltaj / (VAC_RAW_MV/1000) olacak şekilde güncelleyin.
@@ -59,8 +63,16 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <WebServer.h>
+#include <Preferences.h>
 #include <time.h>
 #include "secrets.h"
+
+// Kalibrasyon oranları (AC/BAT/CHG_DIVIDER_RATIO) artık http://<esp32-ip>/kalibrasyon
+// sayfasından, yeniden flaş atmaya gerek kalmadan ayarlanabiliyor — girilen değer
+// ESP32'nin kalıcı hafızasına (NVS) yazılır, resetlense/kesinti olsa bile kaybolmaz.
+// Kodun başındaki AC_DIVIDER_RATIO/BAT_DIVIDER_RATIO/CHG_DIVIDER_RATIO sabitleri sadece
+// NVS boşsa (ilk kurulum) kullanılan başlangıç değerleridir.
+Preferences calibPrefs;
 
 // Kesinti başlangıç saatini/tarihini gerçek takvim zamanı olarak gösterebilmek için
 // NTP ile zaman senkronize edilir (ESP32'nin pilli RTC'si yok, WiFi bağlanınca
@@ -80,6 +92,7 @@ const int PIN_LED_RED = 7;
 // erişilen basit durum sayfası. IP adresi Wi-Fi bağlanınca seri porta basılır.
 WebServer webServer(80);
 float gVac = 0, gVbat = 0, gVchg = 0;
+float gVacRawMv = 0, gVbatRawMv = 0, gVchgRawMv = 0;
 int gSoc = 0;
 
 // Ortak katot varsayıldı: HIGH = LED yanar. Ortak anot ise bu ikisini ters çevirin.
@@ -561,8 +574,70 @@ void handleRoot() {
   html += "<div class='row'>Uptime: " + String(millis() / 1000) + " s</div>";
   html += "<h2>Son kesintiler</h2><div class='row' style='white-space:pre-line'>" +
           buildOutageLogMessage() + "</div>";
+  html += "<p><a href='/kalibrasyon' style='color:#8ab4f8'>Kalibrasyon</a></p>";
   html += "</body></html>";
   webServer.send(200, "text/html", html);
+}
+
+// http://<esp32-ip>/kalibrasyon — multimetreyle ölçülen gerçek voltajı girip
+// AC/BAT/CHG_DIVIDER_RATIO'yu yeniden flaş atmadan, doğrudan buradan güncellemek için.
+void handleCalibration() {
+  String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                "<title>Kalibrasyon</title>"
+                "<style>body{font-family:sans-serif;background:#111;color:#eee;padding:20px}"
+                "h2{margin-top:1.5em}.info{color:#aaa;font-size:0.95em}"
+                "input{font-size:1em;padding:4px;width:100px}"
+                "button{font-size:1em;padding:4px 12px;margin-left:6px}"
+                "a{color:#8ab4f8}</style></head><body>";
+  html += "<p><a href='/'>&larr; Durum sayfasina don</a></p>";
+  html += "<h1>Kalibrasyon</h1>";
+  html += "<p class='info'>Multimetre ile hattin GERCEK voltajini olcup asagiya girin ve "
+           "Kaydet'e basin. Oran otomatik hesaplanip kalici hafizaya (NVS) yazilir, "
+           "reset/kesinti ile kaybolmaz, yeniden flas atmaya gerek yok.</p>";
+
+  struct Line { const char* baslik; const char* hat; float rawMv; float voltaj; float oran; };
+  Line lines[3] = {
+    {"AC hatti", "ac", gVacRawMv, gVac, AC_DIVIDER_RATIO},
+    {"Batarya", "bat", gVbatRawMv, gVbat, BAT_DIVIDER_RATIO},
+    {"Sarj cikisi", "chg", gVchgRawMv, gVchg, CHG_DIVIDER_RATIO},
+  };
+  for (int i = 0; i < 3; i++) {
+    html += "<h2>" + String(lines[i].baslik) + "</h2>";
+    html += "<p class='info'>Ham deger: " + String(lines[i].rawMv, 1) + " mV &nbsp; | &nbsp; "
+            "Hesaplanan: " + String(lines[i].voltaj, 2) + " V &nbsp; | &nbsp; "
+            "Mevcut oran: " + String(lines[i].oran, 5) + "</p>";
+    html += "<form method='POST' action='/kalibrasyon/kaydet'>";
+    html += "<input type='hidden' name='hat' value='" + String(lines[i].hat) + "'>";
+    html += "<label>Gercek voltaj (V): <input type='number' step='0.01' name='gercek' required></label>";
+    html += "<button type='submit'>Kaydet</button>";
+    html += "</form>";
+  }
+  html += "</body></html>";
+  webServer.send(200, "text/html", html);
+}
+
+void handleCalibrationSave() {
+  String hat = webServer.arg("hat");
+  float gercek = webServer.arg("gercek").toFloat();
+
+  float rawMv = 0;
+  const char* key = nullptr;
+  if (hat == "ac") { rawMv = gVacRawMv; key = "ac_ratio"; }
+  else if (hat == "bat") { rawMv = gVbatRawMv; key = "bat_ratio"; }
+  else if (hat == "chg") { rawMv = gVchgRawMv; key = "chg_ratio"; }
+
+  // rawMv çok küçükse (örn. sensör hattı bağlı değil) sıfıra bölme/anlamsız dev sayı olmasın
+  if (key != nullptr && rawMv > 10.0 && gercek > 0) {
+    float newRatio = gercek / (rawMv / 1000.0);
+    calibPrefs.putFloat(key, newRatio);
+    if (hat == "ac") AC_DIVIDER_RATIO = newRatio;
+    else if (hat == "bat") BAT_DIVIDER_RATIO = newRatio;
+    else if (hat == "chg") CHG_DIVIDER_RATIO = newRatio;
+  }
+
+  webServer.sendHeader("Location", "/kalibrasyon");
+  webServer.send(303);
 }
 
 void setup() {
@@ -573,6 +648,13 @@ void setup() {
   Serial.println("UPS_MONITOR_ESP32C3_BOOT");
   analogReadResolution(12);
 
+  // Kalibrasyon oranlarını NVS'den yükle — hiç kaydedilmemişse (ilk kurulum) kodun
+  // başındaki AC_DIVIDER_RATIO/BAT_DIVIDER_RATIO/CHG_DIVIDER_RATIO değerleri kalır.
+  calibPrefs.begin("ups", false);
+  AC_DIVIDER_RATIO = calibPrefs.getFloat("ac_ratio", AC_DIVIDER_RATIO);
+  BAT_DIVIDER_RATIO = calibPrefs.getFloat("bat_ratio", BAT_DIVIDER_RATIO);
+  CHG_DIVIDER_RATIO = calibPrefs.getFloat("chg_ratio", CHG_DIVIDER_RATIO);
+
   connectWifi();
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER1, NTP_SERVER2);
 
@@ -581,6 +663,8 @@ void setup() {
   syncTelegramOffset();
 
   webServer.on("/", handleRoot);
+  webServer.on("/kalibrasyon", handleCalibration);
+  webServer.on("/kalibrasyon/kaydet", HTTP_POST, handleCalibrationSave);
   webServer.begin();
   Serial.println("HTTP durum sayfasi baslatildi (yukarida basilan IP adresine tarayicidan gidin)");
 }
@@ -597,6 +681,9 @@ void loop() {
   gVbat = vBat;
   gVchg = vChg;
   gSoc = soc;
+  gVacRawMv = vAcRawMv;
+  gVbatRawMv = vBatRawMv;
+  gVchgRawMv = vChgRawMv;
 
   updateState(vAc, soc);
   updateLed();

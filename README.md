@@ -174,10 +174,16 @@ kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
   kopyalayın, kendi Wi-Fi ve Telegram bot bilgilerinizi girin. `secrets.h` `.gitignore`'da — **asla
   GitHub'a gitmez**, sırlarınız güvende kalır.
 - **Kurulumdan sonra MUTLAKA** `AC_DIVIDER_RATIO`, `BAT_DIVIDER_RATIO` ve `CHG_DIVIDER_RATIO`
-  sabitlerini multimetre ile kalibre edin (dosya içi yorumlarda adımlar var) — ESP32'nin ADC'si
-  AVR'ye göre daha az doğrusal olduğundan bu adım burada daha da önemli. `CHG_DIVIDER_RATIO`,
-  `BAT_DIVIDER_RATIO` ile aynı direnç çiftini kullandığından başlangıçta ondan kopyalandı ama
-  farklı bir düğüm olduğu için ayrı kalibre edilmeli.
+  sabitlerini multimetre ile kalibre edin — ESP32'nin ADC'si AVR'ye göre daha az doğrusal
+  olduğundan bu adım burada daha da önemli. `CHG_DIVIDER_RATIO`, `BAT_DIVIDER_RATIO` ile aynı
+  direnç çiftini kullandığından başlangıçta ondan kopyalandı ama farklı bir düğüm olduğu için
+  ayrı kalibre edilmeli.
+- **Kalibrasyon artık web üzerinden yapılabiliyor (9 Eylül 2026):** `http://<esp32-ip>/kalibrasyon`
+  sayfasına girip her hat için multimetreyle ölçülen gerçek voltajı yazıp "Kaydet"e basmanız
+  yeterli — oran otomatik hesaplanıp ESP32'nin kalıcı hafızasına (NVS, `Preferences` kütüphanesi)
+  yazılır, reset/kesinti ile kaybolmaz, **yeniden flaş atmaya gerek yok**. Kodun içindeki
+  `AC_DIVIDER_RATIO`/`BAT_DIVIDER_RATIO`/`CHG_DIVIDER_RATIO` sabitleri artık sadece NVS boşsa
+  (ilk kurulum) kullanılan başlangıç değerleri.
 - Pin seçimi bilinçli yapıldı: GPIO2/8/9 gibi boot-strapping pinlerinden kaçınıldı (bu karttaki
   GPIO9 doğrudan BOOT tuşu, GPIO8 kartın dahili LED'ine bağlı) — ADC hatları GPIO0/GPIO1/GPIO3
   (ADC1, Wi-Fi ile çakışmaz) üzerinden alındı — dosya başındaki yorumda gerekçesi var.
