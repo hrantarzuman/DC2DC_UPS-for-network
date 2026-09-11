@@ -29,6 +29,9 @@
 <img src="images/telegram-bot-ornegi.png" width="320" alt="Telegram botu örnek konuşma">
 <br><sub>Telegram botu — /start, /durum ve otomatik durum değişikliği bildirimleri</sub>
 
+<img src="images/gercek-yuk-testi-8-saat.png" width="320" alt="8 saatlik gerçek yük testi ekran görüntüsü">
+<br><sub>Gerçek yük testi — modem+Pi+HDD+alarm birlikte, 8 saat sonunda akü hâlâ %55</sub>
+
 ## Durum (8 Eylül 2026)
 
 - ✅ Faz 0 — Tüketim tahmini: Pi ~3-4W (ölçülmüş), modem 12V/2.5A (30W) adaptör tavanı worst-case kabul edildi.
@@ -53,8 +56,15 @@
   olduğundan düşük görünüyor. SOC_TABLE, Power-Xtra PX26-12B datasheet'inin resmi 20 saatlik deşarj
   bitiş voltajına (10.50V=%0) göre düzleştirildi, ON_BATTERY↔ON_BATTERY_LOW geçişine 1 dakikalık ayrı
   bir debounce eklendi (anlık dalgalanmadan Telegram spam'i gitmesin diye).
-- ⏳ Faz 3-4, 6 — Perfboard montajının geri kalanı (Schottky diyot, akü, çıkışlar), yük testi, kalıcı
-  montaj, NETWORK_INVENTORY.md güncellemesi bekliyor.
+- ✅ **Faz 3 — Gerçek yük testi tamamlandı** (11 Eylül 2026): modem + Pi CM5 + HDD + alarm sistemi
+  (plandan fazla yük) birlikte UPS'e bağlı, fiş çekilip kesinti simüle edildi. Pi tarafında SSH ile
+  `vcgencmd get_throttled` sürekli `0x0` (hiç undervoltage/throttling yok), tek bir reset olmadı,
+  modem de resetlenmedi, HDD erişilebilir kaldı. 8 saat sonunda akü hâlâ **%55 (12.11V)** — voltaj
+  bazlı doğrusal uzatmayla **teorik toplam runtime ~17-18 saat** (kurşun asitte son %10-15'te voltaj
+  daha hızlı çöktüğünden bu iyimser bir üst sınır, ama 4 saatlik hedefin çok üzerinde olduğu kesin).
+  Akü fazla yorulmasın diye test bu noktada durduruldu, tam boşalana kadar sürdürülmedi.
+- ⏳ Faz 4, 6 — Kalıcı montaj (proje kutusu, sigortalama, etiketleme),
+  `network-docs`/`NETWORK_INVENTORY.md` güncellemesi bekliyor.
 
 ## Mimari Özeti
 
@@ -239,9 +249,11 @@ kendi WiFi'si üzerinden HTTP durum sayfası eklendi.
 1. ~~BOM'daki parçaları sipariş et~~ ✅ akü, şarj modülü, diyotlar, dirençler, perfboard, barrel jack alındı.
 2. ~~Firmware'i yükle, Wi-Fi/Telegram doğrula~~ ✅ tamamlandı (8 Eylül 2026) — test bildirimi geldi.
 3. ~~Akünün ilk şarjı~~ ✅ yapılıyor (14.4V/4-5A ile, akım ~0.5A altına düşünce float'a (13.6-13.8V) geçilecek).
-4. **[DC-UPS Bağlantı Şeması](https://claude.ai/code/artifact/9c88a91e-7731-4aa1-8342-e20f013d8b7d)'na göre perfboard üzerinde devreyi kur** — sırayı şemadaki "Bağlantı sırası" bölümü belirliyor.
-5. Gerilim bölücüleri bağlayıp `AC_DIVIDER_RATIO`/`BAT_DIVIDER_RATIO` kalibrasyonunu multimetre ile yap.
-6. Modem+Pi'yi devreye bağlayıp fiş çekme testiyle switchover'ı doğrula, gerçek runtime'ı ölç.
+4. ~~Perfboard üzerinde devreyi kur~~ ✅ tamamlandı.
+5. ~~Gerilim bölücüleri bağlayıp kalibrasyon yap~~ ✅ tamamlandı — artık web arayüzünden (`/kalibrasyon`) yeniden flaş atmadan yapılabiliyor.
+6. ~~Modem+Pi'yi devreye bağlayıp fiş çekme testiyle switchover'ı doğrula, gerçek runtime'ı ölç~~ ✅
+   tamamlandı (11 Eylül 2026) — modem+Pi+HDD+alarm birlikte, 8 saatte akü %55, tek reset yok,
+   teorik toplam runtime ~17-18 saat.
 7. Kalıcı montaj (proje kutusu, sigortalama, etiketleme).
 8. `network-docs` reposundaki `NETWORK_INVENTORY.md` ve `CLAUDE.md`'yi güncelle, bu repoya link ver.
 
