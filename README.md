@@ -63,6 +63,14 @@
   bazlı doğrusal uzatmayla **teorik toplam runtime ~17-18 saat** (kurşun asitte son %10-15'te voltaj
   daha hızlı çöktüğünden bu iyimser bir üst sınır, ama 4 saatlik hedefin çok üzerinde olduğu kesin).
   Akü fazla yorulmasın diye test bu noktada durduruldu, tam boşalana kadar sürdürülmedi.
+- ⚠️ **İki XL4015 şarj modülü art arda bozuldu** (11-12 Eylül 2026) — ilki PC ile adaptör aynı anda
+  bağlıyken (muhtemel ground loop), ikincisi tam devreye (D1 + akü + gerilim bölücüler) bağlanıp
+  AC-DC adaptörden doğrudan güç verilince duman çıkararak yandı. Modül tek başına (lab kaynağıyla,
+  5A yükte 15dk) sorunsuzdu — şüphelenilen kök neden, çıkışta zaten dolu/düşük empedanslı akü
+  varken ani/sınırsız güç verilmesinin soft-start'ı zayıf modülde overshoot/aşırı akıma yol açması.
+  Gerilim bölücüler (47kΩ+10kΩ, 100kΩ+10kΩ) arızalarla ilgisiz bulundu — bağlantı doğru, çekilen
+  akım ihmal edilebilir. Yeni modül takılmadan önce izlenecek kademeli/akım-sınırlı başlatma
+  prosedürü → [`docs/XL4015_KADEMELI_BASLATMA_TESTI.md`](docs/XL4015_KADEMELI_BASLATMA_TESTI.md).
 - ⏳ Faz 4, 6 — Kalıcı montaj (proje kutusu, sigortalama, etiketleme),
   `network-docs`/`NETWORK_INVENTORY.md` güncellemesi bekliyor.
 
